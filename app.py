@@ -15,7 +15,7 @@ MAPA_DESTINOS = {
     "FLN": {"nome": "FLORIANOPOLIS", "endereco": "RUA PASCHOAL APOLONIO PASCOAL, 45 - CENTRO - FLORIANOPOLIS/SC - CEP: 88010-460"},
     "GYN": {"nome": "GOIANIA", "endereco": "AV TOCANTINS, 250 - SETOR CENTRAL - GOIANIA/GO - CEP: 74015-010"},
     "MAO": {"nome": "MANAUS", "endereco": "AV MAPA, 120 - DISTRITO INDUSTRIAL - MANAUS/AM - CEP: 69075-000"},
-    "POA": {"nome": "PORTO ALEGRE", "endereco": "RUA DOS ANDRADAS, 1444 - CENTRO HISTORICO - PORTO ALEGRE/RS - CEP: 90020-010"},
+    "POA": {"nome": "PORTO ALEGRE", "endereco": "CNPJ: 05.438.697/0001-09<br>RUA DOS ANDRADAS, 1444 - CENTRO HISTORICO PORTO ALEGRE/RS - CEP: 90020-010"},
     "PVH": {"nome": "PORTO VELHO", "endereco": "AV JORGE TEIXEIRA, 1500 - INDUSTRIAL - PORTO VELHO/RO - CEP: 76821-001"}
 }
 
@@ -27,7 +27,6 @@ siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por ví
 file = st.file_uploader("2. Carregue a Planilha de Informações", type=["xlsm", "xlsx"])
 
 def gerar_html_shipper_oficial(ctx):
-    # Gera o fundo com as listras vermelhas nas laterais imitando o papel regulamentar da IATA
     html_content = f"""
     <html>
     <head>
@@ -41,7 +40,6 @@ def gerar_html_shipper_oficial(ctx):
                 padding: 0;
                 background-color: #fff;
             }}
-            /* Bordas vermelhas regulamentares da IATA nas laterais */
             .page-border {{
                 box-sizing: border-box;
                 width: 210mm;
@@ -64,7 +62,6 @@ def gerar_html_shipper_oficial(ctx):
                 font-weight: bold;
                 margin-bottom: 12px;
             }}
-            .w-100 {{ width: 100%; }}
             .tbl {{
                 width: 100%;
                 border-collapse: collapse;
@@ -169,8 +166,8 @@ def gerar_html_shipper_oficial(ctx):
                         <span class="label">Este embarque está dentro das limitações prescritas para: (deletar o campo não aplicável)</span>
                         <table style="width: 100%; border: 0; font-size: 8pt; margin-top: 5px;">
                             <tr>
-                                <td style="border: 0; padding: 0; width: 50%;"><s>AERONAVE DE PASSAGEIROS E CARGA</s></td>
-                                <td style="border: 0; padding: 0; width: 50%;"><strong>SOMENTE AERONAVE DE CARGA</strong></td>
+                                <td style="border: 0; padding: 0; width: 50%;"><strong>AERONAVE DE PASSAGEIROS E CARGA</strong></td>
+                                <td style="border: 0; padding: 0; width: 50%;"><s>SOMENTE AERONAVE DE CARGA</s></td>
                             </tr>
                         </table>
                     </td>
@@ -294,4 +291,91 @@ if siglas_input:
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     sacas_manuais = {}
     
-    colunas_tela = st.columns()
+    colunas_tela = st.columns(len(lista_siglas))
+    for idx, sigla in enumerate(lista_siglas):
+        with colunas_tela[idx]:
+            # Padrão 17 para POA e 7 para os demais, conforme regras internas da New Post
+            default_val = 17 if sigla == "POA" else 7
+            sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
+
+    if file:
+        try:
+            df_raw = pd.read_excel(file, header=None, engine='openpyxl')
+            
+            if st.button("🔢 GERAR SHIPPERS OFICIAIS IATA"):
+                zip_buffer = io.BytesIO()
+                emitidos = []
+                erros_cidades = []
+
+                with ZipFile(zip_buffer, "w") as zip_file:
+                    for sigla in lista_siglas:
+                        dest_info = MAPA_DESTINOS.get(sigla, {"nome": sigla, "endereco": "ENDEREÇO NÃO CADASTRADO"})
+                        cidade_alvo = dest_info["nome"]
+                        
+                        # Correção de Segurança contra KeyError: lê com .get() garantindo fallback padrão caso mude rápido em tela
+                        qtd_sacas_escolhida = sacas_manuais.get(sigla, 7)
+                        
+                        linha_dados = None
+                        for index, row in df_raw.iterrows():
+                            linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
+                            if cidade_alvo in linha_texto and "TOTAL" not in linha_texto:
+                                linha_dados = row
+                                break
+
+                        if linha_dados is not None:
+                            peso_capturado = extrair_peso_seguro(linha_dados.values)
+                            
+                            if peso_capturado == 0.0:
+                                erros_cidades.append(f"{sigla} (Peso não localizado)")
+                                continue
+
+                            g7_peso_real = Decimal(str(peso_capturado))
+                            f7_qtd_sacas = Decimal(str(qtd_sacas_escolhida))
+                            
+                            if sigla == "CGB" and f7_qtd_sacas == 7:
+                                i7_fib = Decimal('4')
+                            else:
+                                v_i = float(g7_peso_real / f7_qtd_sacas) / 4.5
+                                i7_fib = Decimal(str(math.ceil(v_i) if (v_i - int(v_i)) > 0.50 else math.floor(v_i)))
+
+                            j7_kg_g = (g7_peso_real / f7_qtd_sacas / i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            
+                            while True:
+                                k7_saca = (j7_kg_g * i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                l7_total_simulado = k7_saca * f7_qtd_sacas
+                                m7_saldo = l7_total_simulado - g7_peso_real
+                                if m7_saldo >= 0: break
+                                else: j7_kg_g += Decimal('0.01')
+
+                            contexto = {
+                                'CIDADE': cidade_alvo,
+                                'ENDERECO_CONSIGNATARIO': dest_info["endereco"],
+                                'FIBREBOARD': int(i7_fib),
+                                'PESO_G': "{:.2f}".format(j7_kg_g).replace('.', ','),
+                                'TOTAL_OVERPACK': "{:.2f}".format(k7_saca).replace('.', ','),
+                                'MARCACAO': " ".join([f"#{i+1}" for i in range(int(f7_qtd_sacas))]),
+                                'DATA': date.today().strftime('%d/%m/%Y'),
+                                'QTD_OVERPACK': int(f7_qtd_sacas)
+                            }
+
+                            conteudo_html = gerar_html_shipper_oficial(contexto)
+                            zip_file.writestr(f"Shipper_{sigla}.html", conteudo_html.encode('utf-8'))
+                            emitidos.append(sigla)
+                        else:
+                            erros_cidades.append(f"{sigla} (Cidade não localizada)")
+
+                if erros_cidades:
+                    for err in erros_cidades:
+                        st.warning(f"⚠️ {err}")
+
+                if emitidos:
+                    zip_buffer.seek(0)
+                    st.success(f"✅ Shippers Oficiais geradas para: {', '.join(emitidos)}")
+                    st.download_button(
+                        label="📥 BAIXAR SHIPPERS OFICIAIS (ZIP)",
+                        data=zip_buffer,
+                        file_name=f"Shippers_Oficiais_NewPost.zip",
+                        mime="application/zip"
+                    )
+        except Exception as e:
+            st.error(f"Erro no processamento: {e}")
