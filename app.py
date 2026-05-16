@@ -5,11 +5,9 @@ import math
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from zipfile import ZipFile
-
-# Nova biblioteca de PDF estável (instale com: pip install fpdf2)
 from fpdf import FPDF
 
-# 1. CLASSE PARA DESENHAR A SHIPPER EM PDF
+# 1. CLASSE DO LAYOUT DO PDF
 class ShipperPDF(FPDF):
     def layout_shipper(self, ctx):
         self.add_page()
@@ -24,10 +22,8 @@ class ShipperPDF(FPDF):
         x = self.get_x()
         y = self.get_y()
         
-        # Quadrante Esquerdo (Expedidor)
         self.multi_cell(95, 6, "Expedidor:\nNEW POST SOLUÇÕES EM LOGISTICAS LTDA\nCNPJ: 28.678.104/0001-79\nR UBALDO FAGGEANI, 355 - JARDIM LAS PALMAS\nPORTO FERREIRA/SP - CEP: 13667-262", border=1)
         
-        # Quadrante Direito (AWB)
         self.set_xy(x + 95, y)
         self.multi_cell(95, 10, "Nº do Conhecimento Aéreo:\n\nPágina 1 de 1 Páginas", border=1)
         
@@ -71,14 +67,11 @@ class ShipperPDF(FPDF):
         self.cell(15, 30, "9", border=1, align="C")
         self.cell(15, 30, "-", border=1, align="C")
         
-        # Célula customizada da Quantidade (Coluna central)
         self.set_xy(x + 95, y_dados)
         self.multi_cell(75, 5, f"\n{ctx['FIBREBOARD']} FIBREBOARD BOXES {ctx['PESO_G']} Kg G\nOVERPACK USED X {ctx['QTD_OVERPACK']}\n{ctx['MARCACAO']}\nTOTAL QUANTITY PER OVERPACK {ctx['TOTAL_OVERPACK']} Kg G", border=0)
         
-        # Contorno da coluna de quantidade
         self.set_xy(x + 95, y_dados)
         self.cell(75, 30, "", border=1)
-        
         self.cell(20, 30, "Y963", border=1, ln=1, align="C")
         
         # Termos e Assinatura
@@ -92,12 +85,15 @@ class ShipperPDF(FPDF):
         self.ln(5)
         self.cell(0, 6, f"Data da Emissão: {ctx['DATA']}", ln=1)
 
-# 2. CONFIGURAÇÃO STREAMLIT
+# 2. MAPA DE TRADUÇÃO
 MAPA_DESTINOS = {
     "CGR": "CAMPO GRANDE", "CGB": "CUIABA", "CWB": "CURITIBA", 
     "FLN": "FLORIANOPOLIS", "GYN": "GOIANIA", "MAO": "MANAUS", 
     "POA": "PORTO ALEGRE", "PVH": "PORTO VELHO"
 }
+
+st.set_page_config(page_title="New Post - Shippers 2.0 PDF", layout="wide")
+st.title("🚀 Gerador de Shippers New Post - V2.0")
 
 siglas_input = st.text_input("Siglas dos Destinos (Ex: CGB, POA, MAO):").upper().strip()
 file = st.file_uploader("Upload da Planilha de Coleta Base (.xlsm ou .xlsx)", type=["xlsm", "xlsx"])
@@ -130,7 +126,7 @@ if file and siglas_input:
                     df_f = df_f[~df_f[c_dest].astype(str).str.upper().str.contains("TOTAL", na=False)]
 
                     if not df_f.empty:
-                        # Cálculos de Compensação de Saldo M >= 0
+                        # Lógica de cálculo de compensação
                         g7_peso_real = Decimal(str(pd.to_numeric(df_f[c_peso], errors='coerce').sum()))
                         c_sacas = df_f.iloc[0].get('SACAS', df_f.iloc[0].get('QTD', 7))
                         f7_qtd_sacas = Decimal(str(int(c_sacas) if pd.notnull(c_sacas) else 7))
@@ -160,12 +156,15 @@ if file and siglas_input:
                             'QTD_OVERPACK': int(f7_qtd_sacas)
                         }
 
-                        # Geração usando fpdf2
+                        # AJUSTE CRUCIAL: Captura correta dos bytes do PDF para o ZIP
                         pdf = ShipperPDF()
                         pdf.layout_shipper(contexto)
-                        pdf_bytes = pdf.output()
                         
-                        zip_file.writestr(f"Shipper_{sigla}.pdf", pdf_bytes)
+                        # .output() sem parâmetros retorna uma string/bytes dependendo da versão, 
+                        # forçamos a codificação estável em latin-1 convertida para bytes
+                        pdf_output_bytes = pdf.output().encode('latin-1')
+                        
+                        zip_file.writestr(f"Shipper_{sigla}.pdf", pdf_output_bytes)
                         emitidos.append(sigla)
 
             if emitidos:
