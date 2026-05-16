@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import math
+import re
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from zipfile import ZipFile
@@ -13,15 +14,13 @@ MAPA_DESTINOS = {
     "POA": "PORTO ALEGRE", "PVH": "PORTO VELHO"
 }
 
-st.set_page_config(page_title="New Post - Shippers 2.0 Dynamic", layout="wide")
+st.set_page_config(page_title="New Post - Shippers 2.0 Robust", layout="wide")
 st.title("🚀 Gerador de Shippers New Post - V2.0")
-st.subheader("Insira os Destinos e Informe as Sacas Manualmente")
+st.subheader("Processamento Seguro contra Erros de Planilha")
 
-# 1. CAMPOS DE ENTRADA PRINCIPAIS
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA, MAO):").upper().strip()
-file = st.file_uploader("2. Carregue a Planilha de Informações (onde o robô vai buscar o Peso Real)", type=["xlsm", "xlsx"])
+file = st.file_uploader("2. Carregue a Planilha de Informações", type=["xlsm", "xlsx"])
 
-# Função que desenha o documento em formato Web pronto para virar PDF
 def gerar_html_shipper(ctx):
     html_content = f"""
     <html>
@@ -91,14 +90,40 @@ def gerar_html_shipper(ctx):
     """
     return html_content
 
+def extrair_peso_seguro(linha_row):
+    """Varre as células da linha buscando extrair o valor numérico do Peso Real de forma protegida"""
+    valores_numericos = []
+    for val in linha_row:
+        if pd.notnull(val) and not isinstance(val, str):
+            try:
+                v_float = float(val)
+                if v_float > 0:
+                    valores_numericos.append(v_float)
+            except:
+                pass
+        elif isinstance(val, str):
+            # Se for texto, limpa caracteres comuns de moedas/unidades e tenta converter
+            txt_limpo = re.sub(r'[^\d.,]', '', val).strip()
+            if "," in txt_limpo and "." in txt_limpo:
+                txt_limpo = txt_limpo.replace(".", "").replace(",", ".")
+            elif "," in txt_limpo:
+                txt_limpo = txt_limpo.replace(",", ".")
+            try:
+                v_float = float(txt_limpo)
+                if v_float > 0:
+                    valores_numericos.append(v_float)
+            except:
+                pass
+    
+    # Retorna o maior número encontrado na linha (geralmente o peso real total) ou fallback
+    return valores_numericos[0] if valores_numericos else 0.0
+
 if siglas_input:
     lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
     
-    # 2. BLOCO DINÂMICO DE INSERÇÃO DE SACAS
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     sacas_manuais = {}
     
-    # Cria uma caixinha numérica para cada sigla digitada
     colunas_tela = st.columns(len(lista_siglas))
     for idx, sigla in enumerate(lista_siglas):
         with colunas_tela[idx]:
@@ -106,19 +131,19 @@ if siglas_input:
 
     if file:
         try:
-            # Varredura inteligente para ler a planilha sem depender de nomes exatos de colunas
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
             
             if st.button("🔢 CALCULAR SALDOS E GERAR SHIPPERS"):
                 zip_buffer = io.BytesIO()
                 emitidos = []
+                erros_cidades = []
 
                 with ZipFile(zip_buffer, "w") as zip_file:
                     for sigla in lista_siglas:
                         cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
                         qtd_sacas_escolhida = sacas_manuais[sigla]
                         
-                        # Acha a linha da cidade na planilha
+                        # Localização da linha correspondente à cidade
                         linha_dados = None
                         for index, row in df_raw.iterrows():
                             linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
@@ -127,13 +152,16 @@ if siglas_input:
                                 break
 
                         if linha_dados is not None:
-                            # Coluna G (Índice 6) é o Peso Bruto Real trazido pela planilha
-                            v_peso_real = linha_dados[6]
+                            peso_capturado = extrair_peso_seguro(linha_dados.values)
+                            
+                            if peso_capturado == 0.0:
+                                erros_cidades.append(f"{sigla} (Peso não localizado ou zerado)")
+                                continue
 
-                            g7_peso_real = Decimal(str(pd.to_numeric(v_peso_real, errors='coerce')))
+                            g7_peso_real = Decimal(str(peso_capturado))
                             f7_qtd_sacas = Decimal(str(qtd_sacas_escolhida))
                             
-                            # Executa a regra matemática de cálculo de compensação de saldos
+                            # Execução das regras matemáticas de equilíbrio
                             if sigla == "CGB" and f7_qtd_sacas == 7:
                                 i7_fib = Decimal('4')
                             else:
@@ -159,19 +187,26 @@ if siglas_input:
                                 'QTD_OVERPACK': int(f7_qtd_sacas)
                             }
 
-                            # Monta o arquivo final para download
                             conteudo_html = gerar_html_shipper(contexto)
                             zip_file.writestr(f"Shipper_{sigla}.html", conteudo_html.encode('utf-8'))
                             emitidos.append(sigla)
+                        else:
+                            erros_cidades.append(f"{sigla} (Cidade não encontrada na planilha)")
+
+                if erros_cidades:
+                    for err in erros_cidades:
+                        st.warning(f"⚠️ Atenção: {err}")
 
                 if emitidos:
                     zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers calculadas para: {', '.join(emitidos)}")
+                    st.success(f"✅ Sucesso! Shippers processadas para: {', '.join(emitidos)}")
                     st.download_button(
-                        label="📥 DOWNLOAD DAS SHIPPERS AUTOMÁTICAS (ZIP)",
+                        label="📥 DOWNLOAD DAS SHIPPERS (ZIP)",
                         data=zip_buffer,
                         file_name=f"Shippers_Calculadas_{date.today()}.zip",
                         mime="application/zip"
                     )
+                else:
+                    st.error("Nenhum destino pôde ser processado com as informações atuais da planilha.")
         except Exception as e:
-            st.error(f"Erro no processamento: {e}")
+            st.error(f"Erro crítico no processamento de dados: {e}")
