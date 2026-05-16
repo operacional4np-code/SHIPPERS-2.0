@@ -5,7 +5,7 @@ import math
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from zipfile import ZipFile
-from fpdf import FPDF
+from fpdf import PDF
 
 # 1. CLASSE DO LAYOUT DO PDF
 class ShipperPDF(FPDF):
