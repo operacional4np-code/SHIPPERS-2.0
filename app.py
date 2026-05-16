@@ -294,4 +294,4 @@ if siglas_input:
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     sacas_manuais = {}
     
-    colunas_tela = st.columns(
+    colunas_tela = st.columns()
