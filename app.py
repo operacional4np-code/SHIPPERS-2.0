@@ -22,7 +22,7 @@ MAPA_DESTINOS = {
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post — Padrão Word (.docx)")
-st.subheader("Algoritmo de Verificação de Saldo Positivo (Idêntico ao Ajuste Manual do Excel)")
+st.subheader("Fórmulas Convertidas Diretamente do Excel da New Post")
 
 # 1. ENTRADAS DE DADOS
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):").upper().strip()
@@ -44,15 +44,17 @@ def extrair_dados_linha_completa(df_raw, termo_busca):
         if termo_busca in linha_texto and "TOTAL" not in linha_texto:
             valores = list(row.values)
             
-            # Mapeamento dinâmico conforme colunas B, C e D da planilha de coleta
+            # Coluna B: Destino
             destino_txt = str(valores[1]).upper() if len(valores) > 1 else termo_busca
             
+            # Coluna C: Qtd Volumes
             qtd_volumes = 1
             if len(valores) > 2 and pd.notnull(valores[2]):
                 try:
                     qtd_volumes = int(float(str(valores[2]).replace(',', '.')))
                 except: pass
                 
+            # Coluna D: Peso Original
             peso_original = 0.0
             if len(valores) > 3 and pd.notnull(valores[3]):
                 try:
@@ -84,7 +86,7 @@ if siglas_input:
         try:
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
             
-            if st.button("🔢 GERAR DOCUMENTOS WORD (CALIBRADO COM REFERÊNCIA)"):
+            if st.button("🔢 GERAR DOCUMENTOS WORD (FÓRMULAS TRADUZIDAS)"):
                 zip_buffer = io.BytesIO()
                 emitidos = []
                 erros_cidades = []
@@ -97,46 +99,53 @@ if siglas_input:
                         destino_completo, q_volumes, p_original = extrair_dados_linha_completa(df_raw, cidade_alvo)
 
                         if p_original is not None and p_original > 0:
-                            # 1. Peso Corrigido (Coluna G): (Sacas * 3) + Peso Original
+                            # --- EXECUÇÃO DAS SUAS FÓRMULAS ---
+                            
+                            # 1. Coluna G: =(F6*3)+D6 (Sacas * Peso da Saca de 3kg + Peso Original)
                             peso_corrigido_g = (qtd_sacas_escolhida * 3) + p_original
                             
-                            # 2. Fibreboard (Coluna I): Truncamento/Corte matemático conforme exemplo (9,64 = 9)
-                            fracao_fib = q_volumes / qtd_sacas_escolhida
-                            i7_fib = math.floor(fracao_fib)
+                            # 2. Coluna I: =SEERRO(C4/F4;"-") (Volumes / Sacas com truncamento: 9,64 = 9)
+                            i7_fib = int(q_volumes / qtd_sacas_escolhida)
                             if i7_fib == 0: 
                                 i7_fib = 1
                             
-                            # Transforma para Decimal para precisão absoluta nas regras de saldo
+                            # Transforma em Decimal para rodar a simulação da Coluna M sem perder centavos
                             g_peso_ajustado_dec = Decimal(str(peso_corrigido_g))
                             f_sacas_dec = Decimal(str(qtd_sacas_escolhida))
                             i_fib_dec = Decimal(str(i7_fib))
                             
-                            # 3. Varredura Inteligente para Encontrar o Kg G Perfeito (Coluna J)
-                            # Começa o teste partindo do valor básico e busca o ajuste ótimo da planilha
-                            base_calculo = (g_peso_ajustado_dec / f_sacas_dec / i_fib_dec)
-                            j7_kg_g = base_calculo.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+                            # 3. Coluna J: =SEERRO((G5/F5)/I5;"-") 
+                            # Valor base sem ajustes
+                            base_calculo_j = (g_peso_ajustado_dec / f_sacas_dec) / i_fib_dec
+                            j7_kg_g = base_calculo_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
                             
                             melhor_j = j7_kg_g
                             menor_saldo_positivo = Decimal('inf')
                             
-                            # Varre uma faixa de opções de centavos para cima para encontrar o menor positivo igual ao seu ajuste manual
-                            for teste_cents in range(100):
+                            # Simulação da Coluna M: Varre os centavos para cima até achar o saldo positivo mais próximo de zero
+                            for teste_cents in range(200):  # Procura em uma faixa de até 2 reais para cima
                                 j_teste = j7_kg_g + (Decimal(str(teste_cents)) * Decimal('0.01'))
+                                
+                                # Coluna K: =SEERRO(J5*I5;"-") (Peso da caixa * Quantidade de caixas)
                                 k7_total_saca_teste = (j_teste * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                
+                                # Coluna L: Peso Total com sacas incluído simulado (K7 * Sacas)
                                 l7_total_destino_teste = k7_total_saca_teste * f_sacas_dec
+                                
+                                # Coluna M: Conferência de Peso (Total Simulado - Peso Corrigido Real)
                                 m7_saldo_teste = l7_total_destino_teste - g_peso_ajustado_dec
                                 
-                                # Regra de ouro da New Post: Tem que ser positivo (>= 0) e o mais próximo possível de zero
+                                # A sua regra: O número deve ser POSITIVO (>= 0) e o mais PRÓXIMO de zero
                                 if m7_saldo_teste >= 0:
                                     if m7_saldo_teste < menor_saldo_positivo:
                                         menor_saldo_positivo = m7_saldo_teste
                                         melhor_j = j_teste
                                         
-                            # Aplica o melhor valor calibrado encontrado
+                            # Define o valor perfeito encontrado pela simulação da Coluna M
                             j7_kg_g = melhor_j
                             k7_total_saca_final = (j7_kg_g * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-                            # 4. Formatação das variáveis do Word padrão Brasil
+                            # 4. Formatação para as chaves do documento Word
                             txt_fibreboard = str(int(i7_fib))
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
@@ -178,7 +187,7 @@ if siglas_input:
                     st.download_button(
                         label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                         data=zip_buffer,
-                        file_name="Shippers_Calibradas_NewPost.zip",
+                        file_name="Shippers_F formulas_Excel.zip",
                         mime="application/zip"
                     )
                 else:
