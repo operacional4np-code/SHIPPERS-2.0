@@ -5,7 +5,7 @@ import math
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from zipfile import ZipFile
-from pdf import PDF
+from fpdf import FPDF
 
 # 1. CLASSE DO LAYOUT DO PDF
 class ShipperPDF(FPDF):
@@ -14,7 +14,7 @@ class ShipperPDF(FPDF):
         self.set_font("Arial", "B", 13)
         
         # Título Principal
-        self.cell(0, 10, "DECLARAÇÃO DO EXPEDIDOR PARA ARTIGOS PERIGOSOS", border=1, ln=1, align="C", fill=False)
+        self.cell(0, 10, "DECLARACAO DO EXPEDIDOR PARA ARTIGOS PERIGOSOS", border=1, ln=1, align="C", fill=False)
         self.set_fill_color(240, 240, 240)
         
         # Bloco 1: Expedidor e AWB
@@ -22,18 +22,18 @@ class ShipperPDF(FPDF):
         x = self.get_x()
         y = self.get_y()
         
-        self.multi_cell(95, 6, "Expedidor:\nNEW POST SOLUÇÕES EM LOGISTICAS LTDA\nCNPJ: 28.678.104/0001-79\nR UBALDO FAGGEANI, 355 - JARDIM LAS PALMAS\nPORTO FERREIRA/SP - CEP: 13667-262", border=1)
+        self.multi_cell(95, 6, "Expedidor:\nNEW POST SOLUCOES EM LOGISTICAS LTDA\nCNPJ: 28.678.104/0001-79\nR UBALDO FAGGEANI, 355 - JARDIM LAS PALMAS\nPORTO FERREIRA/SP - CEP: 13667-262", border=1)
         
         self.set_xy(x + 95, y)
-        self.multi_cell(95, 10, "Nº do Conhecimento Aéreo:\n\nPágina 1 de 1 Páginas", border=1)
+        self.multi_cell(95, 10, "Nº do Conhecimento Aereo:\n\nPagina 1 de 1 Paginas", border=1)
         
         # Bloco 2: Consignatário
         y_atual = self.get_y()
         self.set_xy(x, y_atual)
-        self.multi_cell(95, 6, f"Consignatário:\nBRASIL POSTAL LTDA - ME\nAV FERNANDO CORREA DA COSTA, 3180\nSHANGRILA - {ctx['CIDADE']}\nCEP: 78070-200", border=1)
+        self.multi_cell(95, 6, f"Consignatario:\nBRASIL POSTAL LTDA - ME\nAV FERNANDO CORREA DA COSTA, 3180\nSHANGRILA - {ctx['CIDADE']}\nCEP: 78070-200", border=1)
         
         self.set_xy(x + 95, y_atual)
-        self.multi_cell(95, 15, "Nº de Referência do Expedidor:\n(Opcional)", border=1)
+        self.multi_cell(95, 15, "Nº de Referencia do Expedidor:\n(Opcional)", border=1)
         
         # Detalhes de Transporte
         self.set_font("Arial", "B", 9)
@@ -41,7 +41,7 @@ class ShipperPDF(FPDF):
         
         self.set_font("Arial", "", 9)
         y_transp = self.get_y()
-        self.multi_cell(95, 6, "Este embarque está dentro das limitações prescritas para:\nAERONAVE DE PASSAGEIROS E CARGA", border=1)
+        self.multi_cell(95, 6, "Este embarque esta dentro das limitacoes prescritas para:\nAERONAVE DE PASSAGEIROS E CARGA", border=1)
         self.set_xy(x + 95, y_transp)
         self.multi_cell(95, 6, f"Aeroporto de Origem: CONFINS\nAeroporto de Destino: {ctx['CIDADE']}", border=1)
         
@@ -77,13 +77,13 @@ class ShipperPDF(FPDF):
         # Termos e Assinatura
         self.ln(5)
         self.set_font("Arial", "B", 8)
-        self.multi_cell(0, 4, "AVISO: A falha em cumprir em todos os aspectos com a regulamentação aplicável de artigos perigosos será transgressão às leis em vigor e sujeita às penalidades legais.")
+        self.multi_cell(0, 4, "AVISO: A falha em cumprir em todos os aspectos com a regulamentacao aplicavel de artigos perigosos sera transgressao as leis em vigor e sujeita as penalidades legais.")
         self.ln(2)
         self.set_font("Arial", "", 8)
-        self.multi_cell(0, 4, "Declaro que o conteúdo desta remessa está completa e precisamente descrito acima pelo nome apropriado para embarque, que está classificado, embalado, marcado e etiquetado de acordo com as regulamentações aplicáveis.")
+        self.multi_cell(0, 4, "Declaro que o conteudo desta remessa esta completa e precisamente descrito acima pelo nome apropriado para embarque, que esta classificado, embalado, marcado e etiquetado de acordo com as regulamentacoes aplicaveis.")
         
         self.ln(5)
-        self.cell(0, 6, f"Data da Emissão: {ctx['DATA']}", ln=1)
+        self.cell(0, 6, f"Data da Emissao: {ctx['DATA']}", ln=1)
 
 # 2. MAPA DE TRADUÇÃO
 MAPA_DESTINOS = {
@@ -100,36 +100,30 @@ file = st.file_uploader("Upload da Planilha de Coleta Base (.xlsm ou .xlsx)", ty
 
 if file and siglas_input:
     try:
-        df_raw = pd.read_excel(file, header=None, engine='openpyxl')
-        header_row = 0
-        for i, row in df_raw.iterrows():
-            if "DESTINO" in [str(val).upper() for val in row.values]:
-                header_row = i
-                break
-        
-        df = pd.read_excel(file, header=header_row, engine='openpyxl')
-        df.columns = [str(c).strip().upper() for c in df.columns]
-        
+        df = pd.read_excel(file, header=None, engine='openpyxl')
         lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
 
         if st.button(f"🔢 CALCULAR E EMITIR {len(lista_siglas)} SHIPPERS EM PDF"):
             zip_buffer = io.BytesIO()
             emitidos = []
 
-            c_dest = next((c for c in df.columns if "DESTINO" in c), None)
-            c_peso = next((c for c in df.columns if "PESO" in c), None)
-
             with ZipFile(zip_buffer, "w") as zip_file:
                 for sigla in lista_siglas:
                     cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                    df_f = df[df[c_dest].astype(str).str.contains(cidade_alvo, case=False, na=False)].copy()
-                    df_f = df_f[~df_f[c_dest].astype(str).str.upper().str.contains("TOTAL", na=False)]
+                    
+                    linha_dados = None
+                    for index, row in df.iterrows():
+                        linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
+                        if cidade_alvo in linha_texto and "TOTAL" not in linha_texto:
+                            linha_dados = row
+                            break
 
-                    if not df_f.empty:
-                        # Lógica de cálculo de compensação
-                        g7_peso_real = Decimal(str(pd.to_numeric(df_f[c_peso], errors='coerce').sum()))
-                        c_sacas = df_f.iloc[0].get('SACAS', df_f.iloc[0].get('QTD', 7))
-                        f7_qtd_sacas = Decimal(str(int(c_sacas) if pd.notnull(c_sacas) else 7))
+                    if linha_dados is not None:
+                        v_sacas = linha_dados[5]
+                        v_peso_real = linha_dados[6]
+
+                        g7_peso_real = Decimal(str(pd.to_numeric(v_peso_real, errors='coerce')))
+                        f7_qtd_sacas = Decimal(str(int(v_sacas) if pd.notnull(v_sacas) else 7))
                         
                         if sigla == "CGB" and f7_qtd_sacas == 7:
                             i7_fib = Decimal('4')
@@ -156,15 +150,13 @@ if file and siglas_input:
                             'QTD_OVERPACK': int(f7_qtd_sacas)
                         }
 
-                        # AJUSTE CRUCIAL: Captura correta dos bytes do PDF para o ZIP
+                        # Geração do PDF isolada e segura para a memória
                         pdf = ShipperPDF()
                         pdf.layout_shipper(contexto)
                         
-                        # .output() sem parâmetros retorna uma string/bytes dependendo da versão, 
-                        # forçamos a codificação estável em latin-1 convertida para bytes
-                        pdf_output_bytes = pdf.output().encode('latin-1')
-                        
-                        zip_file.writestr(f"Shipper_{sigla}.pdf", pdf_output_bytes)
+                        # Salvando o PDF diretamente em formato de bytes estável para o ZIP
+                        pdf_bytes = bytes(pdf.output())
+                        zip_file.writestr(f"Shipper_{sigla}.pdf", pdf_bytes)
                         emitidos.append(sigla)
 
             if emitidos:
