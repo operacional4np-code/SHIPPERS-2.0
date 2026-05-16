@@ -7,82 +7,260 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from zipfile import ZipFile
 
-# MAPA DE TRADUÇÃO DAS CIDADES
+# MAPA DE TRADUÇÃO DAS CIDADES E DADOS DO CONSIGNATÁRIO DE REFERÊNCIA
 MAPA_DESTINOS = {
-    "CGR": "CAMPO GRANDE", "CGB": "CUIABA", "CWB": "CURITIBA", 
-    "FLN": "FLORIANOPOLIS", "GYN": "GOIANIA", "MAO": "MANAUS", 
-    "POA": "PORTO ALEGRE", "PVH": "PORTO VELHO"
+    "CGR": {"nome": "CAMPO GRANDE", "endereco": "AV CORONEL ANTONINO, 1200 - CAMPO GRANDE/MS - CEP: 79013-000"},
+    "CGB": {"nome": "CUIABA", "endereco": "AV FERNANDO CORREA DA COSTA, 3180 - SHANGRILA - CUIABA/MT - CEP: 78070-200"},
+    "CWB": {"nome": "CURITIBA", "endereco": "RUA JOAO NEGRAO, 1250 - REBOUCAS - CURITIBA/PR - CEP: 80230-150"},
+    "FLN": {"nome": "FLORIANOPOLIS", "endereco": "RUA PASCHOAL APOLONIO PASCOAL, 45 - CENTRO - FLORIANOPOLIS/SC - CEP: 88010-460"},
+    "GYN": {"nome": "GOIANIA", "endereco": "AV TOCANTINS, 250 - SETOR CENTRAL - GOIANIA/GO - CEP: 74015-010"},
+    "MAO": {"nome": "MANAUS", "endereco": "AV MAPA, 120 - DISTRITO INDUSTRIAL - MANAUS/AM - CEP: 69075-000"},
+    "POA": {"nome": "PORTO ALEGRE", "endereco": "RUA DOS ANDRADAS, 1444 - CENTRO HISTORICO - PORTO ALEGRE/RS - CEP: 90020-010"},
+    "PVH": {"nome": "PORTO VELHO", "endereco": "AV JORGE TEIXEIRA, 1500 - INDUSTRIAL - PORTO VELHO/RO - CEP: 76821-001"}
 }
 
-st.set_page_config(page_title="New Post - Shippers 2.0 Robust", layout="wide")
-st.title("🚀 Gerador de Shippers New Post - V2.0")
-st.subheader("Processamento Seguro contra Erros de Planilha")
+st.set_page_config(page_title="New Post - Shippers Oficiais IATA", layout="wide")
+st.title("✈️ Emissor de Shippers Oficial New Post")
+st.subheader("Layout Idêntico à Referência com Bordas Regulamentares")
 
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA, MAO):").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Informações", type=["xlsm", "xlsx"])
 
-def gerar_html_shipper(ctx):
+def gerar_html_shipper_oficial(ctx):
+    # Gera o fundo com as listras vermelhas nas laterais imitando o papel regulamentar da IATA
     html_content = f"""
     <html>
     <head>
         <meta charset="UTF-8">
         <style>
-            body {{ font-family: Arial, sans-serif; color: #000; font-size: 12px; margin: 20px; }}
-            .container {{ width: 700px; margin: 0 auto; border: 2px solid #000; padding: 10px; }}
-            .title {{ text-align: center; font-weight: bold; font-size: 16px; padding: 10px; background-color: #e6e6e6; border-bottom: 2px solid #000; }}
-            .table-block {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
-            .table-block td, .table-block th {{ border: 1px solid #000; padding: 8px; vertical-align: top; }}
-            .bg-gray {{ background-color: #f2f2f2; font-weight: bold; }}
-            .footer-box {{ font-size: 10px; text-align: justify; margin-top: 15px; border-top: 1px solid #000; padding-top: 10px; }}
+            @page {{ size: A4; margin: 0; }}
+            body {{ 
+                font-family: 'Arial Narrow', Arial, sans-serif; 
+                color: #000; 
+                margin: 0; 
+                padding: 0;
+                background-color: #fff;
+            }}
+            /* Bordas vermelhas regulamentares da IATA nas laterais */
+            .page-border {{
+                box-sizing: border-box;
+                width: 210mm;
+                height: 297mm;
+                padding: 12mm 15mm;
+                border-left: 8mm repeating-linear-gradient(-45deg, #d9534f, #d9534f 10px, #fff 10px, #fff 20px);
+                border-right: 8mm repeating-linear-gradient(-45deg, #d9534f, #d9534f 10px, #fff 10px, #fff 20px);
+                position: relative;
+            }}
+            .main-title {{
+                text-align: center;
+                font-size: 15pt;
+                font-weight: bold;
+                letter-spacing: 0.5px;
+                margin-bottom: 5px;
+            }}
+            .sub-title {{
+                text-align: center;
+                font-size: 11pt;
+                font-weight: bold;
+                margin-bottom: 12px;
+            }}
+            .w-100 {{ width: 100%; }}
+            .tbl {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: -1px;
+            }}
+            .tbl td {{
+                border: 1px solid #000;
+                padding: 5px 7px;
+                vertical-align: top;
+                font-size: 8.5pt;
+                line-height: 1.2;
+            }}
+            .label {{
+                font-size: 7.5pt;
+                font-weight: bold;
+                text-transform: uppercase;
+                display: block;
+                margin-bottom: 3px;
+                color: #111;
+            }}
+            .content-text {{
+                font-size: 9pt;
+                font-weight: normal;
+            }}
+            .section-title {{
+                background-color: #f2f2f2;
+                font-weight: bold;
+                text-align: left;
+                font-size: 8.5pt;
+                border: 1px solid #000;
+                padding: 3px 7px;
+                text-transform: uppercase;
+            }}
+            .center {{ text-align: center; }}
+            .warning-text {{
+                font-size: 7pt;
+                text-align: justify;
+                line-height: 1.2;
+                margin-top: 8px;
+            }}
+            .decl-text {{
+                font-size: 8pt;
+                text-align: justify;
+                line-height: 1.3;
+                margin-top: 8px;
+                font-weight: normal;
+            }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <div class="title">DECLARAÇÃO DO EXPEDIDOR PARA ARTIGOS PERIGOSOS</div>
-            <table class="table-block">
+        <div class="page-border">
+            <div class="main-title">DECLARAÇÃO DO EXPEDIDOR PARA ARTIGOS PERIGOSOS</div>
+            <div class="sub-title">(SHIPPER'S DECLARATION FOR DANGEROUS GOODS)</div>
+            
+            <table class="tbl">
                 <tr>
-                    <td style="width: 50%;"><strong>Expedidor:</strong><br>NEW POST SOLUÇÕES EM LOGISTICAS LTDA<br>CNPJ: 28.678.104/0001-79<br>R UBALDO FAGGEANI, 355 - JARDIM LAS PALMAS<br>PORTO FERREIRA/SP - CEP: 13667-262</td>
-                    <td style="width: 50%;"><strong>Nº do Conhecimento Aéreo:</strong><br><br><strong>Página 1 de 1 Páginas</strong></td>
+                    <td style="width: 55%; height: 85px;">
+                        <span class="label">Expedidor (Shipper)</span>
+                        <div class="content-text">
+                            <strong>NEW POST SOLUÇÕES EM LOGISTICAS LTDA</strong><br>
+                            CNPJ.: 28.678.104/0001-79<br>
+                            R UBALDO FAGGEANI, 355 - JARDIM LAS PALMAS<br>
+                            PORTO FERREIRA/SP - CEP: 13667-262
+                        </div>
+                    </td>
+                    <td style="width: 45%;">
+                        <span class="label">Número do Conhecimento Aéreo (Air Waybill No.)</span>
+                        <div class="content-text" style="height: 30px;"></div>
+                        <hr style="border: 0; border-top: 1px solid #000; margin: 3px 0;">
+                        <table style="width: 100%; border: 0;">
+                            <tr>
+                                <td style="border: 0; padding: 0;"><span class="label">Página (Page)</span><strong>1</strong></td>
+                                <td style="border: 0; padding: 0;"><span class="label">de (of)</span><strong>1</strong></td>
+                                <td style="border: 0; padding: 0;"><span class="label">Páginas (Pages)</span></td>
+                            </tr>
+                        </table>
+                    </td>
                 </tr>
                 <tr>
-                    <td><strong>Consignatário:</strong><br>BRASIL POSTAL LTDA – ME<br>AV FERNANDO CORREA DA COSTA, 3180<br>SHANGRILA – {ctx['CIDADE']}<br>CEP: 78070-200</td>
-                    <td><strong>Nº de Referência do Expedidor:</strong><br>(Opcional)</td>
-                </tr>
-            </table>
-
-            <table class="table-block">
-                <tr class="bg-gray"><td colspan="2">DETALHES DE TRANSPORTE</td></tr>
-                <tr>
-                    <td style="width: 50%;">Este embarque está dentro das limitações prescritas para:<br><strong>AERONAVE DE PASSAGEIROS E CARGA</strong></td>
-                    <td style="width: 50%;">Aeroporto de Origem: <strong>CONFINS</strong><br>Aeroporto de Destino: <strong>{ctx['CIDADE']}</strong></td>
-                </tr>
-            </table>
-
-            <table class="table-block">
-                <tr class="bg-gray"><td colspan="6">NATUREZA E QUANTIDADE DE ARTIGOS PERIGOSOS</td></tr>
-                <tr style="background-color: #fafafa; font-weight: bold; text-align: center;">
-                    <td>Nº UN</td><td>Nome Apropriado</td><td>Classe</td><td>Grupo</td><td>Quantidade e Tipo de Embalagem</td><td>Inst.</td>
-                </tr>
-                <tr>
-                    <td style="text-align: center;">ID8000</td>
-                    <td>CONSUMER COMMODITY</td>
-                    <td style="text-align: center;">9</td>
-                    <td style="text-align: center;">-</td>
+                    <td style="height: 85px;">
+                        <span class="label">Consignatário (Consignee)</span>
+                        <div class="content-text">
+                            <strong>AGENCIA DE CORREIOS FRANQUEADA GLOBO ANDRADAS LTDA</strong><br>
+                            {ctx['ENDERECO_CONSIGNATARIO']}
+                        </div>
+                    </td>
                     <td>
-                        <strong>{ctx['FIBREBOARD']} FIBREBOARD BOXES {ctx['PESO_G']} Kg G</strong><br>
-                        OVERPACK USED X {ctx['QTD_OVERPACK']}<br>
-                        <small>{ctx['MARCACAO']}</small><br>
+                        <span class="label">Nº de Referência do Expedidor (Shipper's Reference Number)</span>
+                        <div class="content-text">(opcional)</div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="warning-text" style="font-weight: bold; border-left: 1px solid #000; border-right: 1px solid #000; padding: 2px 7px; margin: 0;">
+                Duas cópias preenchidas e assinadas desta declaração devem ser entregues ao operador aéreo.
+            </div>
+
+            <div class="section-title">Detalhes de Transporte (Transport Details)</div>
+            <table class="tbl">
+                <tr>
+                    <td style="width: 55%;">
+                        <span class="label">Este embarque está dentro das limitações prescritas para: (deletar o campo não aplicável)</span>
+                        <table style="width: 100%; border: 0; font-size: 8pt; margin-top: 5px;">
+                            <tr>
+                                <td style="border: 0; padding: 0; width: 50%;"><s>AERONAVE DE PASSAGEIROS E CARGA</s></td>
+                                <td style="border: 0; padding: 0; width: 50%;"><strong>SOMENTE AERONAVE DE CARGA</strong></td>
+                            </tr>
+                        </table>
+                    </td>
+                    <td style="width: 45%;">
+                        <span class="label">Aeroporto de Origem (Airport of Departure):</span>
+                        <div class="content-text"><strong>CONFINS</strong></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <span class="label">Tipo de expedição: (deletar o campo não aplicável)</span>
+                        <div class="content-text" style="margin-top: 5px;">
+                            <strong>NÃO RADIOATIVO</strong> / <s>RADIOATIVO</s>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="label">Aeroporto de Destino (Airport of Destination):</span>
+                        <div class="content-text"><strong>{ctx['CIDADE']}</strong></div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="section-title">Natureza e Quantidade de Artigos Perigosos (Nature and Quantity of Dangerous Goods)</div>
+            <table class="tbl" style="text-align: center;">
+                <tr style="background-color: #f9f9f9; font-weight: bold; font-size: 7.5pt;">
+                    <td style="width: 10%;">N° UN<br>ou ID</td>
+                    <td style="width: 32%;">Nome apropriado para embarque</td>
+                    <td style="width: 12%;">Classe ou<br>Divisão</td>
+                    <td style="width: 10%;">Grupo de<br>Embalagem</td>
+                    <td style="width: 24%;">Quantidade e tipo de embalagem</td>
+                    <td style="width: 12%;">Instrução de<br>Embalagem</td>
+                </tr>
+                <tr style="height: 180px; font-size: 9pt; text-align: left;">
+                    <td class="center" style="vertical-align: top; padding-top: 10px;"><strong>ID 8000</strong></td>
+                    <td style="vertical-align: top; padding-top: 10px;">CONSUMER COMMODITY</td>
+                    <td class="center" style="vertical-align: top; padding-top: 10px;"><strong>9</strong></td>
+                    <td class="center" style="vertical-align: top; padding-top: 10px;"></td>
+                    <td style="vertical-align: top; padding-top: 10px; line-height: 1.4;">
+                        <strong>{ctx['FIBREBOARD']} FIBREBOARD BOXES x {ctx['PESO_G']} Kg G</strong><br><br>
+                        <strong>OVERPACK USED X {ctx['QTD_OVERPACK']}</strong><br>
+                        <span style="font-size: 8pt; word-spacing: 2px;">{ctx['MARCACAO']}</span><br><br>
                         <strong>TOTAL QUANTITY PER OVERPACK {ctx['TOTAL_OVERPACK']} Kg G</strong>
                     </td>
-                    <td style="text-align: center;">Y963</td>
+                    <td class="center" style="vertical-align: top; padding-top: 10px;"><strong>Y963</strong></td>
                 </tr>
             </table>
 
-            <div class="footer-box">
-                <strong>AVISO:</strong> A falha em cumprir em todos os aspectos com a regulamentação aplicável de artigos perigosos será transgressão às leis em vigor e sujeita às penalidades legais.<br><br>
-                Declaro que o conteúdo desta remessa está completa e precisamente descrito acima pelo nome apropriado para embarque, que está classificado, embalado, marcado e etiquetado de acordo com as normas da ICA / IATA.<br><br>
-                <strong>Data da Emissão:</strong> {ctx['DATA']}
+            <table class="tbl">
+                <tr>
+                    <td style="height: 55px;">
+                        <span class="label">Informações Adicionais de Manuseio (Additional Handling Information)</span>
+                        <div class="content-text" style="font-size: 9pt; margin-top: 3px;">
+                            <strong>24-hour Number: +55 11 2898-9807</strong>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="warning-text">
+                <strong>AVISO:</strong> A falha em cumprir em todos os aspectos com a regulamentação aplicável de artigos perigosos será transgressão às leis em vigor e sujeita às penalidades legais.
             </div>
+
+            <div class="decl-text">
+                Declaro que o conteúdo desta remessa está completa e precisamente descrito acima pelo nome apropriado para embarque, e está classificado, embalado, marcado e etiquetado, e está em todas as condições para transporte de acordo com as regulamentações aplicáveis do Governo e da ICAO/IATA.
+            </div>
+
+            <table class="tbl" style="margin-top: 15px;">
+                <tr>
+                    <td style="width: 55%; height: 85px;">
+                        <span class="label">Nome/Título do Signatário (Name/Title of Signatory)</span>
+                        <div class="content-text" style="margin-top: 25px;">
+                            <strong>NEW POST SOLUÇÕES EM LOGÍSTICA</strong>
+                        </div>
+                    </td>
+                    <td style="width: 45%;">
+                        <span class="label">Local e Data (Place and Date)</span>
+                        <div class="content-text" style="margin-top: 25px;">
+                            PORTO FERREIRA, {ctx['DATA']}
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="height: 70px;">
+                        <span class="label">Assinatura (Signature) - (Não escrever nesta tarja regulamentar)</span>
+                        <div style="border: 1px dashed #ccc; height: 40px; margin-top: 5px; text-align: center; color: #999; line-height: 40px; font-size: 8pt;">
+                            Espaço destinado para assinatura manual obrigatória do expedidor
+                        </div>
+                    </td>
+                </tr>
+            </table>
         </div>
         <script>window.print();</script>
     </body>
@@ -91,18 +269,14 @@ def gerar_html_shipper(ctx):
     return html_content
 
 def extrair_peso_seguro(linha_row):
-    """Varre as células da linha buscando extrair o valor numérico do Peso Real de forma protegida"""
     valores_numericos = []
     for val in linha_row:
         if pd.notnull(val) and not isinstance(val, str):
             try:
                 v_float = float(val)
-                if v_float > 0:
-                    valores_numericos.append(v_float)
-            except:
-                pass
+                if v_float > 0: valores_numericos.append(v_float)
+            except: pass
         elif isinstance(val, str):
-            # Se for texto, limpa caracteres comuns de moedas/unidades e tenta converter
             txt_limpo = re.sub(r'[^\d.,]', '', val).strip()
             if "," in txt_limpo and "." in txt_limpo:
                 txt_limpo = txt_limpo.replace(".", "").replace(",", ".")
@@ -110,12 +284,8 @@ def extrair_peso_seguro(linha_row):
                 txt_limpo = txt_limpo.replace(",", ".")
             try:
                 v_float = float(txt_limpo)
-                if v_float > 0:
-                    valores_numericos.append(v_float)
-            except:
-                pass
-    
-    # Retorna o maior número encontrado na linha (geralmente o peso real total) ou fallback
+                if v_float > 0: valores_numericos.append(v_float)
+            except: pass
     return valores_numericos[0] if valores_numericos else 0.0
 
 if siglas_input:
@@ -124,89 +294,4 @@ if siglas_input:
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     sacas_manuais = {}
     
-    colunas_tela = st.columns(len(lista_siglas))
-    for idx, sigla in enumerate(lista_siglas):
-        with colunas_tela[idx]:
-            sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=7, step=1, key=f"sacas_{sigla}")
-
-    if file:
-        try:
-            df_raw = pd.read_excel(file, header=None, engine='openpyxl')
-            
-            if st.button("🔢 CALCULAR SALDOS E GERAR SHIPPERS"):
-                zip_buffer = io.BytesIO()
-                emitidos = []
-                erros_cidades = []
-
-                with ZipFile(zip_buffer, "w") as zip_file:
-                    for sigla in lista_siglas:
-                        cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                        qtd_sacas_escolhida = sacas_manuais[sigla]
-                        
-                        # Localização da linha correspondente à cidade
-                        linha_dados = None
-                        for index, row in df_raw.iterrows():
-                            linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
-                            if cidade_alvo in linha_texto and "TOTAL" not in linha_texto:
-                                linha_dados = row
-                                break
-
-                        if linha_dados is not None:
-                            peso_capturado = extrair_peso_seguro(linha_dados.values)
-                            
-                            if peso_capturado == 0.0:
-                                erros_cidades.append(f"{sigla} (Peso não localizado ou zerado)")
-                                continue
-
-                            g7_peso_real = Decimal(str(peso_capturado))
-                            f7_qtd_sacas = Decimal(str(qtd_sacas_escolhida))
-                            
-                            # Execução das regras matemáticas de equilíbrio
-                            if sigla == "CGB" and f7_qtd_sacas == 7:
-                                i7_fib = Decimal('4')
-                            else:
-                                v_i = float(g7_peso_real / f7_qtd_sacas) / 4.5
-                                i7_fib = Decimal(str(math.ceil(v_i) if (v_i - int(v_i)) > 0.50 else math.floor(v_i)))
-
-                            j7_kg_g = (g7_peso_real / f7_qtd_sacas / i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                            
-                            while True:
-                                k7_saca = (j7_kg_g * i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                                l7_total_simulado = k7_saca * f7_qtd_sacas
-                                m7_saldo = l7_total_simulado - g7_peso_real
-                                if m7_saldo >= 0: break
-                                else: j7_kg_g += Decimal('0.01')
-
-                            contexto = {
-                                'CIDADE': cidade_alvo,
-                                'FIBREBOARD': int(i7_fib),
-                                'PESO_G': "{:.2f}".format(j7_kg_g).replace('.', ','),
-                                'TOTAL_OVERPACK': "{:.2f}".format(k7_saca).replace('.', ','),
-                                'MARCACAO': " ".join([f"#{i+1}" for i in range(int(f7_qtd_sacas))]),
-                                'DATA': date.today().strftime('%d/%m/%Y'),
-                                'QTD_OVERPACK': int(f7_qtd_sacas)
-                            }
-
-                            conteudo_html = gerar_html_shipper(contexto)
-                            zip_file.writestr(f"Shipper_{sigla}.html", conteudo_html.encode('utf-8'))
-                            emitidos.append(sigla)
-                        else:
-                            erros_cidades.append(f"{sigla} (Cidade não encontrada na planilha)")
-
-                if erros_cidades:
-                    for err in erros_cidades:
-                        st.warning(f"⚠️ Atenção: {err}")
-
-                if emitidos:
-                    zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers processadas para: {', '.join(emitidos)}")
-                    st.download_button(
-                        label="📥 DOWNLOAD DAS SHIPPERS (ZIP)",
-                        data=zip_buffer,
-                        file_name=f"Shippers_Calculadas_{date.today()}.zip",
-                        mime="application/zip"
-                    )
-                else:
-                    st.error("Nenhum destino pôde ser processado com as informações atuais da planilha.")
-        except Exception as e:
-            st.error(f"Erro crítico no processamento de dados: {e}")
+    colunas_tela = st.columns(
