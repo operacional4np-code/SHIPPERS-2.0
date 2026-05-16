@@ -13,15 +13,15 @@ MAPA_DESTINOS = {
     "POA": "PORTO ALEGRE", "PVH": "PORTO VELHO"
 }
 
-st.set_page_config(page_title="New Post - Shippers 2.0 HTML/PDF", layout="wide")
+st.set_page_config(page_title="New Post - Shippers 2.0 Dynamic", layout="wide")
 st.title("🚀 Gerador de Shippers New Post - V2.0")
-st.subheader("Cálculo de Saldo Automático com Seleção de Colunas")
+st.subheader("Insira os Destinos e Informe as Sacas Manualmente")
 
-# 1. ENTRADAS DE TEXTO E ARQUIVO NA TELA PRINCIPAL
-siglas_input = st.text_input("Siglas do Destino (Ex: CGB, POA, MAO):").upper().strip()
-file = st.file_uploader("Upload da Planilha de Coleta Base (.xlsm ou .xlsx)", type=["xlsm", "xlsx"])
+# 1. CAMPOS DE ENTRADA PRINCIPAIS
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA, MAO):").upper().strip()
+file = st.file_uploader("2. Carregue a Planilha de Informações (onde o robô vai buscar o Peso Real)", type=["xlsm", "xlsx"])
 
-# Função que desenha a folha oficial direto em formato Web imprimível
+# Função que desenha o documento em formato Web pronto para virar PDF
 def gerar_html_shipper(ctx):
     html_content = f"""
     <html>
@@ -91,96 +91,87 @@ def gerar_html_shipper(ctx):
     """
     return html_content
 
-if file and siglas_input:
-    try:
-        # Tenta identificar a linha correta do cabeçalho na planilha dinamicamente
-        df_raw = pd.read_excel(file, header=None, engine='openpyxl')
-        header_row = 0
-        for i, row in df_raw.iterrows():
-            linha_txt = [str(val).upper() for val in row.values if pd.notnull(val)]
-            if "DESTINO" in linha_txt or "PESO" in linha_txt:
-                header_row = i
-                break
-        
-        # Lê a planilha aplicando o cabeçalho correto
-        df = pd.read_excel(file, header=header_row, engine='openpyxl')
-        df.columns = [str(c).strip().upper() for c in df.columns]
-        
-        # --- NOVO BLOCO: SELEÇÃO DINÂMICA DAS COLUNAS NA BARRA LATERAL ---
-        st.sidebar.header("⚙️ Configuração das Colunas")
-        colunas_disponiveis = list(df.columns)
-        
-        # Busca automáticos ou deixa o usuário escolher
-        default_dest = next((c for c in colunas_disponiveis if "DESTINO" in c), colunas_disponiveis[0])
-        default_peso = next((c for c in colunas_disponiveis if "PESO" in c), colunas_disponiveis[1] if len(colunas_disponiveis) > 1 else colunas_disponiveis[0])
-        default_sacas = next((c for c in colunas_disponiveis if "SACA" in c or "QTD" in c), colunas_disponiveis[2] if len(colunas_disponiveis) > 2 else colunas_disponiveis[0])
-        
-        col_destino = st.sidebar.selectbox("Coluna do Destino/Cidade:", colunas_disponiveis, index=colunas_disponiveis.index(default_dest))
-        col_peso = st.sidebar.selectbox("Coluna do Peso Bruto Real:", colunas_disponiveis, index=colunas_disponiveis.index(default_peso))
-        col_sacas = st.sidebar.selectbox("Coluna da Quantidade de Sacas:", colunas_disponiveis, index=colunas_disponiveis.index(default_sacas))
-        
-        lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
+if siglas_input:
+    lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
+    
+    # 2. BLOCO DINÂMICO DE INSERÇÃO DE SACAS
+    st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
+    sacas_manuais = {}
+    
+    # Cria uma caixinha numérica para cada sigla digitada
+    colunas_tela = st.columns(len(lista_siglas))
+    for idx, sigla in enumerate(lista_siglas):
+        with colunas_tela[idx]:
+            sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=7, step=1, key=f"sacas_{sigla}")
 
-        if st.button(f"🔢 CALCULAR E EMITIR {len(lista_siglas)} SHIPPERS"):
-            zip_buffer = io.BytesIO()
-            emitidos = []
+    if file:
+        try:
+            # Varredura inteligente para ler a planilha sem depender de nomes exatos de colunas
+            df_raw = pd.read_excel(file, header=None, engine='openpyxl')
+            
+            if st.button("🔢 CALCULAR SALDOS E GERAR SHIPPERS"):
+                zip_buffer = io.BytesIO()
+                emitidos = []
 
-            with ZipFile(zip_buffer, "w") as zip_file:
-                for sigla in lista_siglas:
-                    cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                    
-                    # Filtra a linha da cidade ignorando totais secundários
-                    df_f = df[df[col_destino].astype(str).str.contains(cidade_alvo, case=False, na=False)].copy()
-                    df_f = df_f[~df_f[col_destino].astype(str).str.upper().str.contains("TOTAL", na=False)]
-
-                    if not df_f.empty:
-                        linha_dados = df_f.iloc[0]
+                with ZipFile(zip_buffer, "w") as zip_file:
+                    for sigla in lista_siglas:
+                        cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
+                        qtd_sacas_escolhida = sacas_manuais[sigla]
                         
-                        # Captura os dados com base nas colunas mapeadas na tela
-                        v_sacas = linha_dados[col_sacas]
-                        v_peso_real = linha_dados[col_peso]
+                        # Acha a linha da cidade na planilha
+                        linha_dados = None
+                        for index, row in df_raw.iterrows():
+                            linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
+                            if cidade_alvo in linha_texto and "TOTAL" not in linha_texto:
+                                linha_dados = row
+                                break
 
-                        g7_peso_real = Decimal(str(pd.to_numeric(v_peso_real, errors='coerce')))
-                        f7_qtd_sacas = Decimal(str(int(v_sacas) if pd.notnull(v_sacas) else 7))
-                        
-                        # Lógica de cálculo de compensação
-                        if sigla == "CGB" and f7_qtd_sacas == 7:
-                            i7_fib = Decimal('4')
-                        else:
-                            v_i = float(g7_peso_real / f7_qtd_sacas) / 4.5
-                            i7_fib = Decimal(str(math.ceil(v_i) if (v_i - int(v_i)) > 0.50 else math.floor(v_i)))
+                        if linha_dados is not None:
+                            # Coluna G (Índice 6) é o Peso Bruto Real trazido pela planilha
+                            v_peso_real = linha_dados[6]
 
-                        j7_kg_g = (g7_peso_real / f7_qtd_sacas / i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                        
-                        while True:
-                            k7_saca = (j7_kg_g * i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                            l7_total_simulado = k7_saca * f7_qtd_sacas
-                            m7_saldo = l7_total_simulado - g7_peso_real
-                            if m7_saldo >= 0: break
-                            else: j7_kg_g += Decimal('0.01')
+                            g7_peso_real = Decimal(str(pd.to_numeric(v_peso_real, errors='coerce')))
+                            f7_qtd_sacas = Decimal(str(qtd_sacas_escolhida))
+                            
+                            # Executa a regra matemática de cálculo de compensação de saldos
+                            if sigla == "CGB" and f7_qtd_sacas == 7:
+                                i7_fib = Decimal('4')
+                            else:
+                                v_i = float(g7_peso_real / f7_qtd_sacas) / 4.5
+                                i7_fib = Decimal(str(math.ceil(v_i) if (v_i - int(v_i)) > 0.50 else math.floor(v_i)))
 
-                        contexto = {
-                            'CIDADE': cidade_alvo,
-                            'FIBREBOARD': int(i7_fib),
-                            'PESO_G': "{:.2f}".format(j7_kg_g).replace('.', ','),
-                            'TOTAL_OVERPACK': "{:.2f}".format(k7_saca).replace('.', ','),
-                            'MARCACAO': " ".join([f"#{i+1}" for i in range(int(f7_qtd_sacas))]),
-                            'DATA': date.today().strftime('%d/%m/%Y'),
-                            'QTD_OVERPACK': int(f7_qtd_sacas)
-                        }
+                            j7_kg_g = (g7_peso_real / f7_qtd_sacas / i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            
+                            while True:
+                                k7_saca = (j7_kg_g * i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                l7_total_simulado = k7_saca * f7_qtd_sacas
+                                m7_saldo = l7_total_simulado - g7_peso_real
+                                if m7_saldo >= 0: break
+                                else: j7_kg_g += Decimal('0.01')
 
-                        conteudo_html = gerar_html_shipper(contexto)
-                        zip_file.writestr(f"Shipper_{sigla}.html", conteudo_html.encode('utf-8'))
-                        emitidos.append(sigla)
+                            contexto = {
+                                'CIDADE': cidade_alvo,
+                                'FIBREBOARD': int(i7_fib),
+                                'PESO_G': "{:.2f}".format(j7_kg_g).replace('.', ','),
+                                'TOTAL_OVERPACK': "{:.2f}".format(k7_saca).replace('.', ','),
+                                'MARCACAO': " ".join([f"#{i+1}" for i in range(int(f7_qtd_sacas))]),
+                                'DATA': date.today().strftime('%d/%m/%Y'),
+                                'QTD_OVERPACK': int(f7_qtd_sacas)
+                            }
 
-            if emitidos:
-                zip_buffer.seek(0)
-                st.success(f"✅ Sucesso! Shippers calculadas para: {', '.join(emitidos)}")
-                st.download_button(
-                    label="📥 DOWNLOAD DAS SHIPPERS (ZIP)",
-                    data=zip_buffer,
-                    file_name=f"Shippers_NewPost_{date.today()}.zip",
-                    mime="application/zip"
-                )
-    except Exception as e:
-        st.error(f"Erro no processamento: {e}")
+                            # Monta o arquivo final para download
+                            conteudo_html = gerar_html_shipper(contexto)
+                            zip_file.writestr(f"Shipper_{sigla}.html", conteudo_html.encode('utf-8'))
+                            emitidos.append(sigla)
+
+                if emitidos:
+                    zip_buffer.seek(0)
+                    st.success(f"✅ Sucesso! Shippers calculadas para: {', '.join(emitidos)}")
+                    st.download_button(
+                        label="📥 DOWNLOAD DAS SHIPPERS AUTOMÁTICAS (ZIP)",
+                        data=zip_buffer,
+                        file_name=f"Shippers_Calculadas_{date.today()}.zip",
+                        mime="application/zip"
+                    )
+        except Exception as e:
+            st.error(f"Erro no processamento: {e}")
