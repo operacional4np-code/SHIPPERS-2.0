@@ -21,7 +21,7 @@ MAPA_DESTINOS = {
 }
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
-st.title("📄 Gerador de Shippers New Post — Padrão Word (.docx)")
+st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo Calibrado com a Balança Comercial")
 
 # 1. ENTRADAS DE DADOS
@@ -85,7 +85,7 @@ if siglas_input:
         try:
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
             
-            if st.button("🔢 CALCULAR E GERAR SHIPPERS PERFEITAS"):
+            if st.button("🔢 CALCULAR E GERAR SHIPPERS"):
                 zip_buffer = io.BytesIO()
                 emitidos = []
                 erros_cidades = []
