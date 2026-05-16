@@ -14,9 +14,10 @@ MAPA_DESTINOS = {
 }
 
 st.set_page_config(page_title="New Post - Shippers 2.0 HTML/PDF", layout="wide")
-st.title("🚀 Gerador de Shippers New Post - V2.0 (Direct Web)")
-st.subheader("Cálculo de Saldo Automático - Pronto para Imprimir")
+st.title("🚀 Gerador de Shippers New Post - V2.0")
+st.subheader("Cálculo de Saldo Automático com Seleção de Colunas")
 
+# 1. ENTRADAS DE TEXTO E ARQUIVO NA TELA PRINCIPAL
 siglas_input = st.text_input("Siglas do Destino (Ex: CGB, POA, MAO):").upper().strip()
 file = st.file_uploader("Upload da Planilha de Coleta Base (.xlsm ou .xlsx)", type=["xlsm", "xlsx"])
 
@@ -92,7 +93,32 @@ def gerar_html_shipper(ctx):
 
 if file and siglas_input:
     try:
-        df = pd.read_excel(file, header=None, engine='openpyxl')
+        # Tenta identificar a linha correta do cabeçalho na planilha dinamicamente
+        df_raw = pd.read_excel(file, header=None, engine='openpyxl')
+        header_row = 0
+        for i, row in df_raw.iterrows():
+            linha_txt = [str(val).upper() for val in row.values if pd.notnull(val)]
+            if "DESTINO" in linha_txt or "PESO" in linha_txt:
+                header_row = i
+                break
+        
+        # Lê a planilha aplicando o cabeçalho correto
+        df = pd.read_excel(file, header=header_row, engine='openpyxl')
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        
+        # --- NOVO BLOCO: SELEÇÃO DINÂMICA DAS COLUNAS NA BARRA LATERAL ---
+        st.sidebar.header("⚙️ Configuração das Colunas")
+        colunas_disponiveis = list(df.columns)
+        
+        # Busca automáticos ou deixa o usuário escolher
+        default_dest = next((c for c in colunas_disponiveis if "DESTINO" in c), colunas_disponiveis[0])
+        default_peso = next((c for c in colunas_disponiveis if "PESO" in c), colunas_disponiveis[1] if len(colunas_disponiveis) > 1 else colunas_disponiveis[0])
+        default_sacas = next((c for c in colunas_disponiveis if "SACA" in c or "QTD" in c), colunas_disponiveis[2] if len(colunas_disponiveis) > 2 else colunas_disponiveis[0])
+        
+        col_destino = st.sidebar.selectbox("Coluna do Destino/Cidade:", colunas_disponiveis, index=colunas_disponiveis.index(default_dest))
+        col_peso = st.sidebar.selectbox("Coluna do Peso Bruto Real:", colunas_disponiveis, index=colunas_disponiveis.index(default_peso))
+        col_sacas = st.sidebar.selectbox("Coluna da Quantidade de Sacas:", colunas_disponiveis, index=colunas_disponiveis.index(default_sacas))
+        
         lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
 
         if st.button(f"🔢 CALCULAR E EMITIR {len(lista_siglas)} SHIPPERS"):
@@ -103,21 +129,21 @@ if file and siglas_input:
                 for sigla in lista_siglas:
                     cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
                     
-                    linha_dados = None
-                    for index, row in df.iterrows():
-                        linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
-                        if cidade_alvo in linha_texto and "TOTAL" not in linha_texto:
-                            linha_dados = row
-                            break
+                    # Filtra a linha da cidade ignorando totais secundários
+                    df_f = df[df[col_destino].astype(str).str.contains(cidade_alvo, case=False, na=False)].copy()
+                    df_f = df_f[~df_f[col_destino].astype(str).str.upper().str.contains("TOTAL", na=False)]
 
-                    if linha_dados is not None:
-                        # Pega os valores por posição física (Coluna F e G)
-                        v_sacas = linha_dados[5]
-                        v_peso_real = linha_dados[6]
+                    if not df_f.empty:
+                        linha_dados = df_f.iloc[0]
+                        
+                        # Captura os dados com base nas colunas mapeadas na tela
+                        v_sacas = linha_dados[col_sacas]
+                        v_peso_real = linha_dados[col_peso]
 
                         g7_peso_real = Decimal(str(pd.to_numeric(v_peso_real, errors='coerce')))
                         f7_qtd_sacas = Decimal(str(int(v_sacas) if pd.notnull(v_sacas) else 7))
                         
+                        # Lógica de cálculo de compensação
                         if sigla == "CGB" and f7_qtd_sacas == 7:
                             i7_fib = Decimal('4')
                         else:
@@ -126,7 +152,6 @@ if file and siglas_input:
 
                         j7_kg_g = (g7_peso_real / f7_qtd_sacas / i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                         
-                        # Loop de ajuste automático do saldo M >= 0
                         while True:
                             k7_saca = (j7_kg_g * i7_fib).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                             l7_total_simulado = k7_saca * f7_qtd_sacas
@@ -144,7 +169,6 @@ if file and siglas_input:
                             'QTD_OVERPACK': int(f7_qtd_sacas)
                         }
 
-                        # Monta o arquivo HTML pronto
                         conteudo_html = gerar_html_shipper(contexto)
                         zip_file.writestr(f"Shipper_{sigla}.html", conteudo_html.encode('utf-8'))
                         emitidos.append(sigla)
