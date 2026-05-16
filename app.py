@@ -22,7 +22,7 @@ MAPA_DESTINOS = {
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
-st.subheader("Cálculo Autônomo Calibrado com a Balança Comercial")
+st.subheader("Cálculo Autônomo")
 
 # 1. ENTRADAS DE DADOS
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):").upper().strip()
