@@ -9,8 +9,7 @@ from docxtpl import DocxTemplate
 from zipfile import ZipFile
 
 # MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta
-MAPA_DESTINOS = {
-    "CGR": "CAMPO GRANDE", 
+MAPA_DESTINOS = { "CGR": "CAMPO GRANDE",
     "CGB": "CUIABA", 
     "CWB": "CURITIBA", 
     "FLN": "FLORIANOPOLIS", 
