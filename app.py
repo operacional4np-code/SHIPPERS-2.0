@@ -75,6 +75,7 @@ if siglas_input:
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
+        default_val = 
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
 
     # O botão fica visível se o arquivo for carregado
@@ -91,7 +92,7 @@ if siglas_input:
                 with ZipFile(zip_buffer, "w") as zip_file:
                     for sigla in lista_siglas:
                         cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                        qtd_sacas_escolhida = sacas_manuais.get(sigla, )
+                        qtd_sacas_escolhida = sacas_manuais.get(sigla, 7)
                         
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
