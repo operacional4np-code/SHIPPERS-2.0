@@ -24,7 +24,7 @@ st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
-# 1. ENTRADAS DE DADOS (Alterado para vir vazio)
+# 1. ENTRADAS DE DADOS
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
@@ -75,7 +75,6 @@ if siglas_input:
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
-        # Alterado value para None para vir em branco
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, step=1, key=f"sacas_{sigla}")
 
     # O botão fica visível se o arquivo for carregado
@@ -86,9 +85,33 @@ if siglas_input:
             st.markdown("---")
             if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
                 
-                # Validação simples para evitar erro caso o usuário esqueça de preencher as sacas
-                valores_nulos = [s for s, v in sacas_manuais.items() if v is None]
-                if valores_nulos:
-                    st.error(f"⚠️ Por favor, insira a quantidade de sacas para: {', '.join(valores_nulos)}")
+                # Validação preventiva para o usuário não calcular com campos vazios
+                valores_vazios = [s for s, v in sacas_manuais.items() if v is None]
+                if valores_vazios:
+                    st.error(f"⚠️ Por favor, preencha a quantidade de sacas para os destinos: {', '.join(valores_vazios)}")
                 else:
-                    zip_buffer = io.Bytes
+                    zip_buffer = io.BytesIO()
+                    emitidos = []
+                    erros_cidades = []
+
+                    with ZipFile(zip_buffer, "w") as zip_file:
+                        for sigla in lista_siglas:
+                            cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
+                            qtd_sacas_escolhida = sacas_manuais.get(sigla, 7)
+                            
+                            destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
+
+                            if p_original is not None and p_original > 0:
+                                
+                                f_sacas = Decimal(str(qtd_sacas_escolhida))
+                                d_peso_original = Decimal(str(p_original))
+                                
+                                # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original da Coleta)
+                                g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
+                                
+                                # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
+                                # Usando ROUND_HALF_UP puramente com Decimais: se a dízima for >= 0.50, vai para cima.
+                                fracao_fib = Decimal(str(q_volumes)) / f_sacas
+                                i_fibreboard = int(fracao_fib.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                                
+                                if i_fibreboard ==
