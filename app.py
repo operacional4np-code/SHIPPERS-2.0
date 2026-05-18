@@ -92,7 +92,7 @@ if siglas_input:
                 with ZipFile(zip_buffer, "w") as zip_file:
                     for sigla in lista_siglas:
                         cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                        qtd_sacas_escolhida = sacas_manuais.get("")
+                        qtd_sacas_escolhida = sacas_manuais.get("none")
                         
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
