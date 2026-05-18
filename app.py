@@ -25,7 +25,7 @@ st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
 # 1. ENTRADAS DE DADOS
-siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="none").upper().strip()
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
 def formatar_valor_br(valor):
