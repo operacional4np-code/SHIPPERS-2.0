@@ -104,13 +104,12 @@ if siglas_input:
                             
                             # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original)
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
-                            
-                            # 2. Coluna I (Fibreboard): Volumes / Sacas truncado
-                            fracao_fib = q_volumes / qtd_sacas_escolhida
-                            i_fibreboard = math.floor(fracao_fib)
-                            if i_fibreboard == 0: 
-                                i_fibreboard = 1
-                            i_fib_dec = Decimal(str(i_fibreboard))
+                            # 2. Coluna I (Fibreboard): Arredondamento matemático exato (ex: 4,95 -> 5 e 4,43 -> 4)
+fracao_fib = q_volumes / qtd_sacas_escolhida
+i_fibreboard = int(Decimal(str(fracao_fib)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+if i_fibreboard == 0: 
+    i_fibreboard = 1
+i_fib_dec = Decimal(str(i_fibreboard))
                             
                             # 3. Varredura Simulada do Peso de Balança da New Post
                             # Começamos a testar os centavos para cima para encontrar o encaixe perfeito
