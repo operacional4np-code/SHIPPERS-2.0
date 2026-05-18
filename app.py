@@ -24,8 +24,8 @@ st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
-# 1. ENTRADAS DE DADOS
-siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="CWB").upper().strip()
+# 1. ENTRADAS DE DADOS (Alterado o 'value' para vir em branco)
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
 def formatar_valor_br(valor):
@@ -68,15 +68,16 @@ def extrair_dados_coleta(df_raw, termo_busca):
             return destino_txt, qtd_volumes, peso_original
     return None, None, None
 
-# 2. SELETOR DE SACAS
+# 2. SELETOR DE SACAS (Só renderiza se o usuário realmente digitar algo)
 sacas_manuais = {}
 if siglas_input:
     lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
     
-    st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
-    for sigla in lista_siglas:
-        default_val = 17 if sigla == "POA" else 7
-        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
+    if lista_siglas:
+        st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
+        for sigla in lista_siglas:
+            default_val = 17 if sigla == "POA" else 7
+            sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
 
     # O botão fica visível se o arquivo for carregado
     if file:
@@ -148,7 +149,6 @@ if siglas_input:
                             
                             texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
                             
-                            # Criando RichText para forçar Arial tamanho 8 (size=16)
                             marcacao_formatada = RichText()
                             marcacao_formatada.add(texto_marcacao, font='Arial', size=16)
 
@@ -194,3 +194,6 @@ if siglas_input:
                     st.error("Nenhuma Shipper pôde ser gerada.")
         except Exception as e:
             st.error(f"Erro no processamento interno do arquivo: {e}")
+else:
+    # Caso o campo de siglas esteja vazio, exibe um aviso amigável para orientar o usuário
+    st.info("💡 Por favor, digite pelo menos uma sigla no campo 1 para liberar as configurações de sacas.")
