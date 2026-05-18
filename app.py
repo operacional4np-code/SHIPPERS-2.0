@@ -27,7 +27,7 @@ file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", typ
 
 def formatar_valor_br(valor):
 """Garante a formatação com duas casas decimais e vírgula separando os centavos"""
-    try:
+try:
         if pd.isna(valor) or valor == "":
             return "0,00"
         return "{:.2f}".format(float(valor)).replace('.', ',')
