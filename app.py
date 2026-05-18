@@ -111,8 +111,8 @@ if siglas_input:
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Varredura do Peso Unitário por Saca
-                            base_j = g_peso_corrigido / f_sacas
+                            # 3. Varredura Simulada do Peso de Balança da New Post (Lógica original restaurada)
+                            base_j = (g_peso_corrigido / f_sacas) / i_fib_dec
                             j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
                             
                             perfeito_j = j_inicio
@@ -121,8 +121,8 @@ if siglas_input:
                             for acrescimo in range(500): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # Peso total do lote usando esse j_teste unitário
-                                l_total_destino = j_teste * f_sacas
+                                k_total_saca = (j_teste * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                l_total_destino = k_total_saca * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
                                 if sigla == "POA":
@@ -136,16 +136,14 @@ if siglas_input:
                                             perfeito_j = j_teste
                                             break
                             
-                            # j7_kg_g é o peso UNITÁRIO de cada saca (ex: 4,94)
                             j7_kg_g = perfeito_j
                             if sigla == "POA":
                                 j7_kg_g = Decimal("4.14")
                                 
-                            # k7_total_saca_final é o peso TOTAL de todas as sacas juntas (ex: 4,94 * 23 = 19,76)
-                            k7_total_saca_final = (j7_kg_g * f_sacas).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            k7_total_saca_final = (j7_kg_g * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-                            # 4. Formatação das variáveis do Word (Adicionado espaço regulamentar antes de FIBREBOARD)
-                            txt_fibreboard = f"{int(i_fibreboard)} FIBREBOARD"
+                            # 4. Formatação das variáveis do Word corrigida
+                            txt_fibreboard = str(int(i_fibreboard))
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
                             
