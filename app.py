@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import io
-import math
 import re
 import unicodedata
 from datetime import date
@@ -23,7 +22,7 @@ MAPA_DESTINOS = {
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
-st.subheader("Filtro Alvo: DESTINO, QNTDE e PESO")
+st.subheader("Filtro Alvo Estrito: DESTINO, QNTDE e PESO")
 
 def remover_acentos(texto):
     """Remove acentos e caracteres especiais para uma busca idêntica"""
@@ -37,19 +36,32 @@ def identificar_colunas(df_raw):
     idx_volumes = 1
     idx_peso = 2
     
+    # Busca por correspondência exata primeiro nas primeiras 30 linhas
     for i in range(min(30, len(df_raw))):
         linha = [remover_acentos(str(val)).upper().strip() for val in df_raw.iloc[i].values]
         
-        # Verifica se a linha atual contém os cabeçalhos desejados
-        tem_destino = any("DESTINO" in col or "DESTIN" in col for col in linha)
-        tem_qntde   = any("QNTDE" in col or "QTD" in col or "VOL" in col or "QUANT" in col for col in linha)
+        if "DESTINO" in linha or "QNTDE" in linha or "PESO" in linha:
+            for idx, col in enumerate(linha):
+                if col == "DESTINO":
+                    idx_destino = idx
+                elif col == "QNTDE":
+                    idx_volumes = idx
+                elif col == "PESO":
+                    idx_peso = idx
+            return idx_destino, idx_volumes, idx_peso
+
+    # Fallback de busca parcial caso haja variações no cabeçalho
+    for i in range(min(30, len(df_raw))):
+        linha = [remover_acentos(str(val)).upper().strip() for val in df_raw.iloc[i].values]
+        tem_destino = any("DESTIN" in col for col in linha)
+        tem_qntde   = any("QNTDE" in col or "QTD" in col or "VOL" in col for col in linha)
         tem_peso    = any("PESO" in col for col in linha)
         
         if tem_destino or tem_qntde or tem_peso:
             for idx, col in enumerate(linha):
-                if "DESTINO" in col or "DESTIN" in col:
+                if "DESTIN" in col:
                     idx_destino = idx
-                elif "QNTDE" in col or "QTD" in col or "VOL" in col or "QUANT" in col:
+                elif "QNTDE" in col or "QTD" in col or "VOL" in col:
                     idx_volumes = idx
                 elif "PESO" in col:
                     idx_peso = idx
@@ -58,7 +70,7 @@ def identificar_colunas(df_raw):
     return idx_destino, idx_volumes, idx_peso
 
 def extrair_dados_coleta(df_raw, termo_busca):
-    """Percorre a planilha somando os dados usando os índices de colunas inteligentes"""
+    """Percorre a planilha somando os dados usando os índices alvo corrigidos"""
     idx_destino, idx_volumes, idx_peso = identificar_colunas(df_raw)
     
     total_volumes = 0
@@ -74,14 +86,13 @@ def extrair_dados_coleta(df_raw, termo_busca):
             continue
             
         val_destino = remover_acentos(str(valores[idx_destino])).upper().strip()
-        linha_texto = remover_acentos(" ".join([str(val).upper() for val in valores if pd.notnull(val)]))
         
-        # Procura o destino na coluna correta e ignora linhas de "TOTAL"
-        if (termo_busca_norm in val_destino or termo_busca_norm in linha_texto) and "TOTAL" not in linha_texto:
+        # Filtro cirúrgico: o destino DEVE estar na coluna DESTINO (evita duplicar com linhas de total)
+        if termo_busca_norm in val_destino and "TOTAL" not in val_destino and "SUBTOTAL" not in val_destino:
             if not destino_txt and pd.notnull(valores[idx_destino]):
                 destino_txt = str(valores[idx_destino]).upper().strip()
             
-            # Extração de QNTDE (Volumes)
+            # Extração de QNTDE
             qtd_volumes_linha = 0
             try:
                 val_vol = valores[idx_volumes]
@@ -90,7 +101,8 @@ def extrair_dados_coleta(df_raw, termo_busca):
                         qtd_volumes_linha = int(val_vol)
                     else:
                         qtd_volumes_linha = int(float(str(val_vol).replace(',', '.')))
-            except: pass
+            except:
+                pass
                 
             # Extração de PESO
             peso_linha = 0.0
@@ -106,7 +118,8 @@ def extrair_dados_coleta(df_raw, termo_busca):
                         elif "," in txt_p:
                             txt_p = txt_p.replace(",", ".")
                         peso_linha = float(txt_p)
-            except: pass
+            except:
+                pass
             
             total_volumes += qtd_volumes_linha
             total_peso += peso_linha
@@ -142,10 +155,10 @@ if siglas_input:
                 emitidos = []
                 erros_cidades = []
                 
-                # Painel de Diagnóstico Visual
+                # Painel de Diagnóstico na tela
                 st.markdown("### 🔍 Diagnóstico de Leitura das Colunas")
                 idx_d, idx_v, idx_p = identificar_colunas(df_raw)
-                st.write(f"📌 **Mapeamento detectado:** Coluna DESTINO: `{idx_d}` | Coluna QNTDE: `{idx_v}` | Coluna PESO: `{idx_p}`")
+                st.write(f"📌 **Mapeamento:** Coluna DESTINO: `{idx_d}` | Coluna QNTDE: `{idx_v}` | Coluna PESO: `{idx_p}`")
                 
                 with ZipFile(zip_buffer, "w") as zip_file:
                     for sigla in lista_siglas:
@@ -161,14 +174,14 @@ if siglas_input:
                             # Coluna G: Peso Corrigido
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
-                            # Coluna I (Fibreboard)
+                            # Coluna I (Fibreboard Boxes)
                             fracao_fib = q_volumes / qtd_sacas_escolhida
                             i_fibreboard = int(Decimal(str(fracao_fib)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
                             if i_fibreboard == 0: 
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # Varredura do peso ideal por caixa (G)
+                            # Varredura do peso ideal por caixa
                             base_j = (g_peso_corrigido / f_sacas) / i_fib_dec
                             j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
                             
@@ -198,7 +211,6 @@ if siglas_input:
                                 
                             k7_total_saca_final = (j7_kg_g * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-                            # Exibe no painel o diagnóstico de cada cidade
                             st.info(f"**{sigla} - {destino_completo}:** QNTDE total: {q_volumes} | PESO extraído: {p_original} kg | Peso Corrigido: {g_peso_corrigido} kg -> **Resultado: {j7_kg_g} Kg G** por caixa.")
 
                             txt_fibreboard = str(int(i_fibreboard))
