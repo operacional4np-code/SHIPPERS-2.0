@@ -104,15 +104,14 @@ if siglas_input:
                             # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original)
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
-                            # 2. Coluna I (Fibreboard): Arredondamento matemático exato (ex: 4,95 -> 5 e 4,43 -> 4)
+                            # 2. Coluna I (Fibreboard): Arredondamento matemático exato
                             fracao_fib = q_volumes / qtd_sacas_escolhida
                             i_fibreboard = int(Decimal(str(fracao_fib)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
                             if i_fibreboard == 0: 
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Varredura Simulada do Peso de Balança da New Post (CORRIGIDA)
-                            # O j_teste agora representa o peso total contido em UMA saca.
+                            # 3. Varredura Simulada do Peso de Balança da New Post
                             base_j = g_peso_corrigido / f_sacas
                             j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
                             
@@ -122,10 +121,7 @@ if siglas_input:
                             for acrescimo in range(500): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # K representa o peso da própria saca
                                 k_total_saca = j_teste.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                                
-                                # O total do destino é o peso de uma saca multiplicado pela quantidade total de sacas
                                 l_total_destino = k_total_saca * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
@@ -179,4 +175,19 @@ if siglas_input:
 
                 if erros_cidades:
                     for err in erros_cidades:
-                        st.warning
+                        st.warning(f"⚠️ {err}")
+
+                if emitidos:
+                    zip_buffer.seek(0)
+                    st.success(f"✅ Perfeito! Shippers geradas com os valores exatos da referência para: {', '.join(emitidos)}")
+                    st.download_button(
+                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
+                        data=zip_buffer,
+                        file_name="Shippers_Final_NewPost.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Nenhuma Shipper pôde ser gerada.")
+        except Exception as e:
+            st.error(f"Erro no processamento interno do arquivo: {e}")
