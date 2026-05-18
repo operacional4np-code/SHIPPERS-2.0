@@ -10,10 +10,10 @@ from zipfile import ZipFile
 
 # MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta
 MAPA_DESTINOS = { "CGR": "CAMPO GRANDE", "CGB": "CUIABA","CWB": "CURITIBA",
-"FLN": "FLORIANOPOLIS", 
-"GYN": "GOIANIA", 
-"MAO": "MANAUS", 
-"POA": "PORTO ALEGRE", 
+"FLN": "FLORIANOPOLIS",
+"GYN": "GOIANIA",
+"MAO": "MANAUS",
+"POA": "PORTO ALEGRE",
 "PVH": "PORTO VELHO"
 }
 
