@@ -85,7 +85,7 @@ if siglas_input:
             st.markdown("---")
             if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
                 
-                # Validação preventiva para o usuário não calcular com campos vazios
+                # Validação preventiva para o usuário não submeter valores nulos
                 valores_vazios = [s for s, v in sacas_manuais.items() if v is None]
                 if valores_vazios:
                     st.error(f"⚠️ Por favor, preencha a quantidade de sacas para os destinos: {', '.join(valores_vazios)}")
@@ -107,11 +107,4 @@ if siglas_input:
                                 d_peso_original = Decimal(str(p_original))
                                 
                                 # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original da Coleta)
-                                g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
-                                
-                                # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
-                                # Usando ROUND_HALF_UP puramente com Decimais: se a dízima for >= 0.50, vai para cima.
-                                fracao_fib = Decimal(str(q_volumes)) / f_sacas
-                                i_fibreboard = int(fracao_fib.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-                                
-                                if i_fibreboard ==
+                                g_peso_corrigido = (f_
