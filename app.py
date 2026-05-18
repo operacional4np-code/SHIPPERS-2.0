@@ -5,7 +5,8 @@ import math
 import re
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
-from docxtpl import DocxTemplate
+# Importação do RichText adicionada aqui
+from docxtpl import DocxTemplate, RichText
 from zipfile import ZipFile
 
 # MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta
@@ -151,47 +152,22 @@ if siglas_input:
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
                             
-                            marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
+                            # Gerando o texto bruto das marcações
+                            texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
+                            
+                            # Criando objeto RichText configurado com Arial tamanho 8 (size 16 significa 8pt)
+                            marcacao_formatada = RichText()
+                            marcacao_formatada.add(texto_marcacao, font='Arial', size=16)
 
                             contexto = {
                                 'FIBREBOARD': txt_fibreboard,
                                 'PESO_G': txt_kg_g,
                                 'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': marcacao,
+                                'MARCACAO': marcacao_formatada,  # Substituído pela versão formatada
                                 'DATA': date.today().strftime('%d/%m/%Y'),
                                 'QTD_OVERPACK': int(qtd_sacas_escolhida)
                             }
 
                             try:
                                 caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
-                                doc = DocxTemplate(caminho_template)
-                                doc.render(contexto)
-                                
-                                doc_io = io.BytesIO()
-                                doc.save(doc_io)
-                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
-                                emitidos.append(sigla)
-                                
-                            except Exception as e_doc:
-                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
-                        else:
-                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
-
-                if erros_cidades:
-                    for err in erros_cidades:
-                        st.warning(f"⚠️ {err}")
-
-                if emitidos:
-                    zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas com a regra oficial aplicada para: {', '.join(emitidos)}")
-                    st.download_button(
-                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
-                        data=zip_buffer,
-                        file_name="Shippers_Final_NewPost.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("Nenhuma Shipper pôde ser gerada.")
-        except Exception as e:
-            st.error(f"Erro no processamento interno do arquivo: {e}")
+                                doc =
