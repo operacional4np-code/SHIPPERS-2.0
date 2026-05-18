@@ -76,7 +76,6 @@ if siglas_input:
     if lista_siglas:
         st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
         for sigla in lista_siglas:
-            # Alterado o value para None para que o campo apareça totalmente em branco
             sacas_manuais[sigla] = st.number_input(
                 f"Sacas para {sigla}:", 
                 min_value=1, 
@@ -93,7 +92,6 @@ if siglas_input:
             st.markdown("---")
             if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
                 
-                # Validação para garantir que o usuário preencheu todas as sacas antes de calcular
                 valores_nulos = [sigla for sigla, valor in sacas_manuais.items() if valor is None]
                 if valores_nulos:
                     st.error(f"⚠️ Por favor, preencha a quantidade de sacas para os destinos: {', '.join(valores_nulos)}")
@@ -195,7 +193,18 @@ if siglas_input:
                     if emitidos:
                         zip_buffer.seek(0)
                         st.success(f"✅ Sucesso! Shippers geradas com a regra oficial aplicada para: {', '.join(emitidos)}")
+                        
+                        # Ajustado aqui para evitar erros de strings quebradas no download_button
                         st.download_button(
                             label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                             data=zip_buffer,
-                            file_name="Shippers_Final_NewPost
+                            file_name="Shippers_Final_NewPost.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
+                    else:
+                        st.error("Nenhuma Shipper pôde ser gerada.")
+        except Exception as e:
+            st.error(f"Erro no processamento interno do arquivo: {e}")
+else:
+    st.info("💡 Por favor, digite pelo menos uma sigla no campo 1 para liberar as configurações de sacas.")
