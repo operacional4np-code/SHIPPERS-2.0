@@ -26,7 +26,7 @@ siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por ví
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
 def formatar_valor_br(valor):
-   """Garante a formatação com duas casas decimais e vírgula separando os centavos"""
+"""Garante a formatação com duas casas decimais e vírgula separando os centavos"""
     try:
         if pd.isna(valor) or valor == "":
             return "0,00"
