@@ -9,14 +9,12 @@ from docxtpl import DocxTemplate
 from zipfile import ZipFile
 
 # MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta
-MAPA_DESTINOS = { "CGR": "CAMPO GRANDE",
-    "CGB": "CUIABA", 
-    "CWB": "CURITIBA", 
-    "FLN": "FLORIANOPOLIS", 
-    "GYN": "GOIANIA", 
-    "MAO": "MANAUS", 
-    "POA": "PORTO ALEGRE", 
-    "PVH": "PORTO VELHO"
+MAPA_DESTINOS = { "CGR": "CAMPO GRANDE", "CGB": "CUIABA", "CWB": "CURITIBA", 
+"FLN": "FLORIANOPOLIS", 
+"GYN": "GOIANIA", 
+"MAO": "MANAUS", 
+"POA": "PORTO ALEGRE", 
+"PVH": "PORTO VELHO"
 }
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
