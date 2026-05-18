@@ -111,69 +111,15 @@ if siglas_input:
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Varredura Inteligente e Corrigida para Precisão IATA
-                            # Calcula a meta real de peso bruto aproximado por saca
-                            meta_peso_saca = g_peso_corrigido / f_sacas
-                            base_j = meta_peso_saca / i_fib_dec
+                            # 3. Varredura Inteligente do Peso de Balança da New Post
+                            base_j = (g_peso_corrigido / f_sacas) / i_fib_dec
                             j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
                             
                             perfeito_j = j_inicio
-                            menor_divergencia = Decimal('inf')
+                            menor_saldo_positivo = Decimal('inf')
                             
                             for acrescimo in range(500): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # A regra de ouro da Cia Aérea: O peso total da saca DEVE ser a multiplicação exata
-                                k_total_saca = j_teste * i_fib_dec
-                                
-                                l_total_destino = k_total_saca * f_sacas
-                                m_conferencia = l_total_destino - g_peso_corrigido
-                                
-                                if sigla == "POA":
-                                    if j_teste == Decimal("4.14"):
-                                        perfeito_j = j_teste
-                                        break
-                                else:
-                                    # Procura o valor que cubra o peso da balança com a menor sobra possível
-                                    if m_conferencia >= 0 and m_conferencia < menor_divergencia:
-                                        menor_divergencia = m_conferencia
-                                        perfeito_j = j_teste
-                                        # Se chegarmos no empate exato (0), encerra o loop imediatamente
-                                        if m_conferencia == 0:
-                                            break
-                            
-                            j7_kg_g = perfeito_j
-                            if sigla == "POA":
-                                j7_kg_g = Decimal("4.14")
-                                
-                            # Garante que k7 seja a multiplicação exata do j7 arredondado obtido pela varredura
-                            k7_total_saca_final = j7_kg_g * i_fib_dec
-
-                            # 4. Formatação das variáveis do Word (Mantendo o Layout)
-                            txt_fibreboard = str(int(i_fibreboard))
-                            txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
-                            txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
-                            
-                            marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
-
-                            contexto = {
-                                'FIBREBOARD': txt_fibreboard,
-                                'PESO_G': txt_kg_g,
-                                'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': marcacao,
-                                'DATA': date.today().strftime('%d/%m/%Y'),
-                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
-                            }
-
-                            try:
-                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
-                                doc = DocxTemplate(caminho_template)
-                                doc.render(contexto)
-                                
-                                doc_io = io.BytesIO()
-                                doc.save(doc_io)
-                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
-                                emitidos.append(sigla)
-                                
-                            except Exception as e_doc:
-                                erros_
+                                # O peso da saca deve ser o produto exato e direto da multiplicação
+                                k_total_saca = j_teste
