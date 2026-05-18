@@ -107,4 +107,4 @@ if siglas_input:
                                 d_peso_original = Decimal(str(p_original))
                                 
                                 # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original da Coleta)
-                                g_peso_corrigido = (f_
+                                g_peso_corrigido = (f_)
