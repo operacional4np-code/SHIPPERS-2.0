@@ -70,11 +70,11 @@ def extrair_dados_coleta(df_raw, termo_busca):
 
 def arredondamento_customizado_coluna_i(valor_float):
     """
-    Regra do Excel: Se a casa decimal for maior ou igual a 50 -> número acima.
-    Se for menor que 50 -> número abaixo.
+    Regra Exata: Se a casa decimal for de 50 para cima (>= 0.50), 
+    arredonda para o número acima. Se for menor, para baixo.
     """
     dec, int_part = math.modf(valor_float)
-    dec = round(dec, 4)
+    dec = round(dec, 4) # Evita dízimas de ponto flutuante do Python
     if dec >= 0.50:
         return int(int_part + 1)
     else:
@@ -113,20 +113,20 @@ if siglas_input:
                             f_sacas = Decimal(str(qtd_sacas_escolhida))
                             d_peso_original = Decimal(str(p_original))
                             
-                            # 1. Peso Corrigido (Sacas * 3kg + Peso da planilha de coleta)
+                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original da Coleta)
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
-                            # 2. Fibreboard Boxes (Qtd Volumes da coleta / Sacas) com corte em 0.50
+                            # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas) com corte estrito em 0.50
                             fracao_fib = q_volumes / qtd_sacas_escolhida
                             i_fibreboard = arredondamento_customizado_coluna_i(fracao_fib)
                             if i_fibreboard == 0: 
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Busca Global Absoluta do Peso Mínimo Positivo (Coluna J)
+                            # 3. Varredura do Peso Unitário Ideal (Coluna J)
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
                             
-                            # Começamos a varredura um pouco abaixo do valor teórico para cobrir todas as curvas decimais
+                            # Começa a busca um pouco abaixo do valor teórico para pegar o ponto de virada exato
                             j_inicio_float = math.floor(base_j_float * 100) / 100 - 0.50
                             if j_inicio_float < 0:
                                 j_inicio_float = 0.01
@@ -135,73 +135,26 @@ if siglas_input:
                             perfeito_j = None
                             menor_saldo_positivo = Decimal('inf')
                             
-                            # Varre um range amplo centavo por centavo (passo de 0.01)
+                            # Testando centavo por centavo para achar o menor resíduo positivo na conferência
                             for acrescimo in range(2000): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # Simulação da fórmula de conferência do Excel: M = (Sacas * J * I) - G
+                                # M = (Sacas * J * I) - G
                                 l_total_destino = j_teste * i_fib_dec * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
-                                # CRITÉRIO DE OURO: Deve ser >= 0 E ser o menor resíduo de toda a varredura
+                                # Critério: m_conferencia deve ser >= 0 e o menor possível
                                 if m_conferencia >= 0:
                                     if m_conferencia < menor_saldo_positivo:
                                         menor_saldo_positivo = m_conferencia
                                         perfeito_j = j_teste
                             
-                            # Se por segurança a busca não achar, adota a base padrão arredondada
                             if perfeito_j == None:
                                 perfeito_j = Decimal(f"{base_j_float:.2f}")
 
                             j7_kg_g = perfeito_j
                             k7_total_saca_final = j7_kg_g * i_fib_dec
 
-                            # 4. Formatação exata com duas casas decimais e vírgula
+                            # 4. Formatação das variáveis do Word
                             txt_fibreboard = str(int(i_fibreboard))
-                            txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
-                            txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
-                            
-                            marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
-
-                            contexto = {
-                                'FIBREBOARD': txt_fibreboard,
-                                'PESO_G': txt_kg_g,
-                                'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': marcacao,
-                                'DATA': date.today().strftime('%d/%m/%Y'),
-                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
-                            }
-
-                            try:
-                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
-                                doc = DocxTemplate(caminho_template)
-                                doc.render(contexto)
-                                
-                                doc_io = io.BytesIO()
-                                doc.save(doc_io)
-                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
-                                emitidos.append(sigla)
-                                
-                            except Exception as e_doc:
-                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
-                        else:
-                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
-
-                if erros_cidades:
-                    for err in erros_cidades:
-                        st.warning(f"⚠️ {err}")
-
-                if emitidos:
-                    zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas com os cálculos alinhados à folha de conferência manual para: {', '.join(emitidos)}")
-                    st.download_button(
-                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
-                        data=zip_buffer,
-                        file_name="Shippers_Final_NewPost.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("Nenhuma Shipper pôde ser gerada.")
-        except Exception as e:
-            st.error(f"Erro no processamento interno do arquivo: {e}")
+                            txt_kg_g       = "{:.2f}".format(j7_kg_g).
