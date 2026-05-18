@@ -145,7 +145,7 @@ k7_total_saca_final = j7_kg_g * i_fib_dec
 
 # 4. Formatação das variáveis do Word
 txt_fibreboard = str(int(i_fibreboard))
-txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
+txt_kg_g= "{:.2f}".format(j7_kg_g).replace('.', ',')
 txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
 
 marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
