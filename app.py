@@ -25,7 +25,7 @@ st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
 # 1. ENTRADAS DE DADOS
-siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="CWB").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
 def formatar_valor_br(valor):
@@ -75,8 +75,8 @@ if siglas_input:
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
-        value=None
-        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", step=1, key=f"sacas_{sigla}")
+        default_val = 17 if sigla == "POA" else 7
+        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
 
     # O botão fica visível se o arquivo for carregado
     if file:
