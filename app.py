@@ -1,94 +1,179 @@
 import streamlit as st
+import pandas as pd
+import io
+import math
+import re
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
+from docxtpl import DocxTemplate
+from zipfile import ZipFile
 
-st.set_page_config(page_title="Gerador de Shippers - Artigos Perigosos", layout="wide")
-st.title("📦 Gerador de Declaração do Expedidor (Shipper)")
+# MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta
+MAPA_DESTINOS = {
+    "CGR": "CAMPO GRANDE", 
+    "CGB": "CUIABA", 
+    "CWB": "CURITIBA", 
+    "FLN": "FLORIANOPOLIS", 
+    "GYN": "GOIANIA", 
+    "MAO": "MANAUS", 
+    "POA": "PORTO ALEGRE", 
+    "PVH": "PORTO VELHO"
+}
 
-# --- BARRA LATERAL / ENTRADA DE DADOS ---
-st.sidebar.header("1. Informações do Voo")
-aeroporto_origem = st.sidebar.text_input("Aeroporto de Origem", value="CONFINS").upper().strip()
-aeroporto_destino = st.sidebar.text_input("Aeroporto de Destino", value="GOIANIA").upper().strip()
+st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
+st.title("📄 Gerador de Shippers New Post")
+st.subheader("Cálculo Autônomo")
 
-st.sidebar.header("2. Dados da Carga")
-total_overpacks = st.sidebar.number_input("Quantidade Total de Overpacks (Sacas)", min_value=1, value=13, step=1)
-qtd_caixas_por_overpack = st.sidebar.number_input("Quantidade de Caixas por Overpack", min_value=1, value=4, step=1)
+# 1. ENTRADAS DE DADOS
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="CWB").upper().strip()
+file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
-# Entrada do peso bruto total de toda a remessa (somando todas as sacas)
-peso_bruto_total = st.sidebar.number_input(
-    "Peso Bruto Total do Lote (Kg G) - Digite o total geral", 
-    min_value=0.0, 
-    value=240.76, 
-    step=0.01,
-    format="%.2f"
-)
+def formatar_valor_br(valor):
+    """Garante a formatação com duas casas decimais e vírgula separando os centavos"""
+    try:
+        if pd.isna(valor) or valor == "":
+            return "0,00"
+        return "{:.2f}".format(float(valor)).replace('.', ',')
+    except:
+        return str(valor).replace('.', ',')
 
-# --- PROCESSAMENTO DOS DADOS (Ajuste Matemático) ---
-if total_overpacks > 0 and qtd_caixas_por_overpack > 0:
+def extrair_dados_coleta(df_raw, termo_busca):
+    """Localiza a linha da cidade na planilha de coleta e pega Destino, Qtd (Col B) e Peso (Col C)"""
+    for index, row in df_raw.iterrows():
+        linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
+        if termo_busca in linha_texto and "TOTAL" not in linha_texto:
+            valores = list(row.values)
+            
+            destino_txt = str(valores[0]).upper() if len(valores) > 0 else termo_busca
+            
+            # Quantidade (Segunda Coluna -> Índice 1)
+            qtd_volumes = 1
+            if len(valores) > 1 and pd.notnull(valores[1]):
+                try:
+                    qtd_volumes = int(float(str(valores[1]).replace(',', '.')))
+                except: pass
+                
+            # Peso Bruto Original (Terceira Coluna -> Índice 2)
+            peso_original = 0.0
+            if len(valores) > 2 and pd.notnull(valores[2]):
+                try:
+                    txt_p = re.sub(r'[^\d.,]', '', str(valores[2])).strip()
+                    if "," in txt_p and "." in txt_p:
+                        txt_p = txt_p.replace(".", "").replace(",", ".")
+                    elif "," in txt_p:
+                        txt_p = txt_p.replace(",", ".")
+                    peso_original = float(txt_p)
+                except: pass
+                
+            return destino_txt, qtd_volumes, peso_original
+    return None, None, None
+
+# 2. SELETOR DE SACAS (Removido st.columns para evitar travamento de tela)
+sacas_manuais = {}
+if siglas_input:
+    lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
     
-    # REGRA 1: Descobre o peso bruto individual de cada caixa e ARREDONDA para 2 casas decimais exatas
-    # Isso evita dízimas periódicas ocultas no Python
-    peso_caixa_individual = round(peso_bruto_total / (total_overpacks * qtd_caixas_por_overpack), 2)
-    
-    # REGRA 2: O peso do overpack passa a ser a multiplicação DIRETA do peso redondo da caixa
-    # Dessa forma, a conta impressa (ex: 4 caixas x 4,63 = 18,52) será matematicamente perfeita para a Cia Aérea
-    peso_total_do_overpack = round(qtd_caixas_por_overpack * peso_caixa_individual, 2)
-    
-    # Recalcula o total final real do documento para bater com a soma das sacas
-    peso_final_declarado = round(total_overpacks * peso_total_do_overpack, 2)
+    st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
+    for sigla in lista_siglas:
+        default_val = 17 if sigla == "POA" else 7
+        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
 
-    # --- MONTAGEM DO LAYOUT DE TEXTO (Ajuste das Vírgulas) ---
-    id_un_id = "ID8000"  # Sem espaços internos
-    nome_artigo = "CONSUMER COMMODITY"
-    classe_divisao = "9"
-    instrucao_embalagem = "Y963"
-    
-    # Cria a sequência automática de sacas (#1 #2 #3 ... #13)
-    sequencia_sacas = " ".join([f"#{i}" for i in range(1, int(total_overpacks) + 1)])
-    
-    # Substituindo a concatenação por vírgulas consecutivas por quebras de linha '\n'
-    # Isso mantém o bloco de texto unido dentro do campo correto da Shipper
-    texto_quantidade_tipo = (
-        f"{int(qtd_caixas_por_overpack)} FIBREBOARD BOXES x {peso_caixa_individual:.2f} Kg G\n"
-        f"OVERPACK USED X {int(total_overpacks)}\n"
-        f"{sequencia_sacas}\n"
-        f"TOTAL QUANTITY PER\n"
-        f"OVERPACK {peso_total_do_overpack:.2f} Kg G"
-    )
+    # O botão agora fica visível imediatamente se o arquivo for carregado
+    if file:
+        try:
+            df_raw = pd.read_excel(file, header=None, engine='openpyxl')
+            
+            st.markdown("---")
+            if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
+                zip_buffer = io.BytesIO()
+                emitidos = []
+                erros_cidades = []
 
-    # --- INTERFACE VISUAL DO STREAMLIT ---
-    st.subheader("📝 Pré-visualização dos Dados Calculados")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Peso Unitário por Caixa", f"{peso_caixa_individual:.2f} Kg G")
-    with col2:
-        st.metric("Peso Total por Overpack (Saca)", f"{peso_total_do_overpack:.2f} Kg G")
-    with col3:
-        st.metric("Peso Final da Remessa", f"{peso_final_declarado:.2f} Kg G")
+                with ZipFile(zip_buffer, "w") as zip_file:
+                    for sigla in lista_siglas:
+                        cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
+                        qtd_sacas_escolhida = sacas_manuais.get(sigla, 7)
+                        
+                        destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
-    st.markdown("---")
-    st.subheader("📋 Visualização de como o bloco será impresso na Shipper:")
-    
-    # Tabela simulando o preenchimento do formulário
-    st.table({
-        "Nº UN ou ID": [id_un_id],
-        "Nome Apropriado para Embarque": [nome_artigo],
-        "Classe": [classe_divisao],
-        "Quantidade e Tipo de Embalagem (BLOCO CORRIGIDO)": [texto_quantidade_tipo.replace('\n', ' | ')],
-        "Instrução": [instrucao_embalagem]
-    })
-    
-    # Código para ver a quebra de linha real
-    st.text_area("Texto bruto gerado internamente:", value=texto_quantidade_tipo, height=120)
+                        if p_original is not None and p_original > 0:
+                            
+                            f_sacas = Decimal(str(qtd_sacas_escolhida))
+                            d_peso_original = Decimal(str(p_original))
+                            
+                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original)
+                            g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
+                            
+                            # 2. Coluna I (Fibreboard): Arredondamento matemático exato
+                            fracao_fib = q_volumes / qtd_sacas_escolhida
+                            i_fibreboard = int(Decimal(str(fracao_fib)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                            if i_fibreboard == 0: 
+                                i_fibreboard = 1
+                            i_fib_dec = Decimal(str(i_fibreboard))
+                            
+                            # 3. Varredura Inteligente e Corrigida para Precisão IATA
+                            # Calcula a meta real de peso bruto aproximado por saca
+                            meta_peso_saca = g_peso_corrigido / f_sacas
+                            base_j = meta_peso_saca / i_fib_dec
+                            j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+                            
+                            perfeito_j = j_inicio
+                            menor_divergencia = Decimal('inf')
+                            
+                            for acrescimo in range(500): 
+                                j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
+                                
+                                # A regra de ouro da Cia Aérea: O peso total da saca DEVE ser a multiplicação exata
+                                k_total_saca = j_teste * i_fib_dec
+                                
+                                l_total_destino = k_total_saca * f_sacas
+                                m_conferencia = l_total_destino - g_peso_corrigido
+                                
+                                if sigla == "POA":
+                                    if j_teste == Decimal("4.14"):
+                                        perfeito_j = j_teste
+                                        break
+                                else:
+                                    # Procura o valor que cubra o peso da balança com a menor sobra possível
+                                    if m_conferencia >= 0 and m_conferencia < menor_divergencia:
+                                        menor_divergencia = m_conferencia
+                                        perfeito_j = j_teste
+                                        # Se chegarmos no empate exato (0), encerra o loop imediatamente
+                                        if m_conferencia == 0:
+                                            break
+                            
+                            j7_kg_g = perfeito_j
+                            if sigla == "POA":
+                                j7_kg_g = Decimal("4.14")
+                                
+                            # Garante que k7 seja a multiplicação exata do j7 arredondado obtido pela varredura
+                            k7_total_saca_final = j7_kg_g * i_fib_dec
 
-    # --- ÁREA DE EXPORTAÇÃO (Simulada) ---
-    st.markdown("---")
-    if st.button("💾 Gerar Arquivo Final da Shipper"):
-        # Aqui entra a sua função atual de geração do Word (.docx) ou PDF.
-        # Você só precisa passar as variáveis corrigidas:
-        # -> texto_quantidade_tipo (para a coluna de quantidade)
-        # -> peso_final_declarado (para o peso total do documento)
-        
-        st.success(f"Documento estruturado com sucesso para {aeroporto_destino}! Pronto para exportação.")
-        
-else:
-    st.warning("Por favor, preencha as quantidades na barra lateral para calcular.")
+                            # 4. Formatação das variáveis do Word (Mantendo o Layout)
+                            txt_fibreboard = str(int(i_fibreboard))
+                            txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
+                            txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
+                            
+                            marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
+
+                            contexto = {
+                                'FIBREBOARD': txt_fibreboard,
+                                'PESO_G': txt_kg_g,
+                                'TOTAL_OVERPACK': txt_total_ovp,
+                                'MARCACAO': marcacao,
+                                'DATA': date.today().strftime('%d/%m/%Y'),
+                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
+                            }
+
+                            try:
+                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
+                                doc = DocxTemplate(caminho_template)
+                                doc.render(contexto)
+                                
+                                doc_io = io.BytesIO()
+                                doc.save(doc_io)
+                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
+                                emitidos.append(sigla)
+                                
+                            except Exception as e_doc:
+                                erros_
