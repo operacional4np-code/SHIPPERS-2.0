@@ -106,7 +106,7 @@ g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
 fracao_fib = Decimal(str(q_volumes)) / f_sacas
 i_fibreboard = int(fracao_fib.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
 
-if i_fibreboard == 0: 
+if i_fibreboard == 0:
 i_fibreboard = 1
 
 i_fib_dec = Decimal(str(i_fibreboard))
