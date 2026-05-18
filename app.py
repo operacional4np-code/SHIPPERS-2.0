@@ -148,7 +148,7 @@ if siglas_input:
                             
                             marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
 
-                            contexto = {
+                            contexto = {}
                                 'FIBREBOARD': txt_fibreboard,
                                 'PESO_G': txt_kg_g,
                                 'TOTAL_OVERPACK': txt_total_ovp,
