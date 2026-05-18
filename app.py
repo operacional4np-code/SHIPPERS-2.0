@@ -157,7 +157,7 @@ contexto = {
 'MARCACAO': marcacao,
 'DATA': date.today().strftime('%d/%m/%Y'),
 'QTD_OVERPACK': int(qtd_sacas_escolhida)
-                            }
+}
 
 try:
 caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
