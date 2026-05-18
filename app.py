@@ -187,7 +187,7 @@ data=zip_buffer,
 file_name="Shippers_Final_NewPost.zip",
 mime="application/zip",
 use_container_width=True
-                    )
+)
 else:
 st.error("Nenhuma Shipper pôde ser gerada.")
 except Exception as e:
