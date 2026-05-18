@@ -68,7 +68,7 @@ def extrair_dados_coleta(df_raw, termo_busca):
             return destino_txt, qtd_volumes, peso_original
     return None, None, None
 
-# 2. SELETOR DE SACAS (Removido st.columns para evitar travamento de tela)
+# 2. SELETOR DE SACAS
 sacas_manuais = {}
 if siglas_input:
     lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
@@ -78,7 +78,7 @@ if siglas_input:
         default_val = 17 if sigla == "POA" else 7
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
 
-    # O botão agora fica visível imediatamente se o arquivo for carregado
+    # O botão fica visível se o arquivo for carregado
     if file:
         try:
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
@@ -111,8 +111,9 @@ if siglas_input:
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Varredura Simulada do Peso de Balança da New Post
-                            base_j = (g_peso_corrigido / f_sacas) / i_fib_dec
+                            # 3. Varredura Simulada do Peso de Balança da New Post (CORRIGIDA)
+                            # O j_teste agora representa o peso total contido em UMA saca.
+                            base_j = g_peso_corrigido / f_sacas
                             j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
                             
                             perfeito_j = j_inicio
@@ -120,7 +121,11 @@ if siglas_input:
                             
                             for acrescimo in range(500): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
-                                k_total_saca = (j_teste * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                
+                                # K representa o peso da própria saca
+                                k_total_saca = j_teste.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                
+                                # O total do destino é o peso de uma saca multiplicado pela quantidade total de sacas
                                 l_total_destino = k_total_saca * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
@@ -139,7 +144,7 @@ if siglas_input:
                             if sigla == "POA":
                                 j7_kg_g = Decimal("4.14")
                                 
-                            k7_total_saca_final = (j7_kg_g * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            k7_total_saca_final = j7_kg_g.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
                             # 4. Formatação das variáveis do Word
                             txt_fibreboard = str(int(i_fibreboard))
@@ -174,19 +179,4 @@ if siglas_input:
 
                 if erros_cidades:
                     for err in erros_cidades:
-                        st.warning(f"⚠️ {err}")
-
-                if emitidos:
-                    zip_buffer.seek(0)
-                    st.success(f"✅ Perfeito! Shippers geradas com os valores exatos da referência para: {', '.join(emitidos)}")
-                    st.download_button(
-                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
-                        data=zip_buffer,
-                        file_name="Shippers_Final_NewPost.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("Nenhuma Shipper pôde ser gerada.")
-        except Exception as e:
-            st.error(f"Erro no processamento interno do arquivo: {e}")
+                        st.warning
