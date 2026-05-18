@@ -24,7 +24,7 @@ st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
-# 1. ENTRADAS DE DADOS (Alterado para iniciar totalmente vazio)
+# 1. ENTRADAS DE DADOS (Inicia totalmente limpo)
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
@@ -75,7 +75,7 @@ if siglas_input:
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
-        # Alterado para value=None para abrir o campo numérico em branco
+        # Abre o campo de número totalmente em branco
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, step=1, key=f"sacas_{sigla}")
 
     # O botão fica visível se o arquivo for carregado
@@ -86,7 +86,7 @@ if siglas_input:
             st.markdown("---")
             if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
                 
-                # Validação preventiva: impede o cálculo caso o usuário esqueça de preencher as sacas
+                # Validação preventiva para garantir que nenhuma saca ficou em branco
                 valores_nulos = [s for s, v in sacas_manuais.items() if v is None]
                 if valores_nulos:
                     st.error(f"⚠️ Por favor, insira a quantidade de sacas para os destinos: {', '.join(valores_nulos)}")
@@ -107,10 +107,10 @@ if siglas_input:
                                 f_sacas = Decimal(str(qtd_sacas_escolhida))
                                 d_peso_original = Decimal(str(p_original))
                                 
-                                # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original da Coleta)
+                                # 1. Coluna G: Peso Corrigido
                                 g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                                 
-                                # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
+                                # 2. Coluna I: Fibreboard Boxes
                                 fracao_fib = Decimal(str(q_volumes)) / f_sacas
                                 i_fibreboard = int(fracao_fib.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
                                 
@@ -133,4 +133,70 @@ if siglas_input:
                                 for acrescimo in range(2000): 
                                     j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                     
-                                    l_total_destino = j
+                                    l_total_destino = j_teste * i_fib_dec * f_sacas
+                                    m_conferencia = l_total_destino - g_peso_corrigido
+                                    
+                                    if m_conferencia >= 0:
+                                        if m_conferencia < menor_saldo_positivo:
+                                            menor_saldo_positivo = m_conferencia
+                                            perfeito_j = j_teste
+                                
+                                if perfeito_j == None:
+                                    perfeito_j = Decimal(f"{base_j_float:.2f}")
+
+                                j7_kg_g = perfeito_j
+                                k7_total_saca_final = j7_kg_g * i_fib_dec
+
+                                # 4. Formatação das variáveis do Word
+                                txt_fibreboard = str(int(i_fibreboard))
+                                txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
+                                txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
+                                
+                                marcacao_texto = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
+
+                                # Configuração da marcação: Arial Black, Tamanho 8 (size=16) e Sem Negrito
+                                marcacao = RichText()
+                                marcacao.add(marcacao_texto, font='Arial Black', size=16, bold=False)
+
+                                contexto = {
+                                    'FIBREBOARD': txt_fibreboard,
+                                    'PESO_G': txt_kg_g,
+                                    'TOTAL_OVERPACK': txt_total_ovp,
+                                    'MARCACAO': marcacao,
+                                    'DATA': date.today().strftime('%d/%m/%Y'),
+                                    'QTD_OVERPACK': int(qtd_sacas_escolhida)
+                                }
+
+                                try:
+                                    caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
+                                    doc = DocxTemplate(caminho_template)
+                                    doc.render(contexto)
+                                    
+                                    doc_io = io.BytesIO()
+                                    doc.save(doc_io)
+                                    zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
+                                    emitidos.append(sigla)
+                                    
+                                except Exception as e_doc:
+                                    erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
+                            else:
+                                erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
+
+                    if erros_cidades:
+                        for err in erros_cidades:
+                            st.warning(f"⚠️ {err}")
+
+                    if emitidos:
+                        zip_buffer.seek(0)
+                        st.success(f"✅ Sucesso! Shippers geradas com a regra oficial aplicada para: {', '.join(emitidos)}")
+                        st.download_button(
+                            label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
+                            data=zip_buffer,
+                            file_name="Shippers_Final_NewPost.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
+                    else:
+                        st.error("Nenhuma Shipper pôde ser gerada.")
+        except Exception as e:
+            st.error(f"Erro no processamento interno do arquivo: {e}")
