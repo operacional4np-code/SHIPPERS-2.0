@@ -24,7 +24,7 @@ st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
-# 1. ENTRADAS DE DADOS (Alterado para iniciar vazio)
+# 1. ENTRADAS DE DADOS (Alterado para vir vazio)
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
@@ -75,7 +75,7 @@ if siglas_input:
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
-        # Alterado value para None para iniciar em branco
+        # Alterado value para None para vir em branco
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, step=1, key=f"sacas_{sigla}")
 
     # O botão fica visível se o arquivo for carregado
@@ -86,70 +86,9 @@ if siglas_input:
             st.markdown("---")
             if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
                 
-                # Validação para impedir o cálculo caso alguma saca não tenha sido digitada
+                # Validação simples para evitar erro caso o usuário esqueça de preencher as sacas
                 valores_nulos = [s for s, v in sacas_manuais.items() if v is None]
                 if valores_nulos:
                     st.error(f"⚠️ Por favor, insira a quantidade de sacas para: {', '.join(valores_nulos)}")
                 else:
-                    zip_buffer = io.BytesIO()
-                    emitidos = []
-                    erros_cidades = []
-
-                    with ZipFile(zip_buffer, "w") as zip_file:
-                        for sigla in lista_siglas:
-                            cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                            qtd_sacas_escolhida = sacas_manuais.get(sigla, 7)
-                            
-                            destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
-
-                            if p_original is not None and p_original > 0:
-                                
-                                f_sacas = Decimal(str(qtd_sacas_escolhida))
-                                d_peso_original = Decimal(str(p_original))
-                                
-                                # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original da Coleta)
-                                g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
-                                
-                                # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
-                                fracao_fib = Decimal(str(q_volumes)) / f_sacas
-                                i_fibreboard = int(fracao_fib.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-                                
-                                if i_fibreboard == 0: 
-                                    i_fibreboard = 1
-
-                                i_fib_dec = Decimal(str(i_fibreboard))
-                                
-                                # 3. Varredura do Peso Unitário Ideal (Coluna J)
-                                base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
-                                
-                                j_inicio_float = math.floor(base_j_float * 100) / 100 - 0.50
-                                if j_inicio_float < 0:
-                                    j_inicio_float = 0.01
-                                    
-                                j_inicio = Decimal(f"{j_inicio_float:.2f}")
-                                perfeito_j = None
-                                menor_saldo_positivo = Decimal('inf')
-                                
-                                for acrescimo in range(2000): 
-                                    j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
-                                    
-                                    l_total_destino = j_teste * i_fib_dec * f_sacas
-                                    m_conferencia = l_total_destino - g_peso_corrigido
-                                    
-                                    if m_conferencia >= 0:
-                                        if m_conferencia < menor_saldo_positivo:
-                                            menor_saldo_positivo = m_conferencia
-                                            perfeito_j = j_teste
-                                
-                                if perfeito_j == None:
-                                    perfeito_j = Decimal(f"{base_j_float:.2f}")
-
-                                j7_kg_g = perfeito_j
-                                k7_total_saca_final = j7_kg_g * i_fib_dec
-
-                                # 4. Formatação das variáveis do Word
-                                txt_fibreboard = str(int(i_fibreboard))
-                                txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
-                                txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
-                                
-                                marcacao_bruta = " ".join()
+                    zip_buffer = io.Bytes
