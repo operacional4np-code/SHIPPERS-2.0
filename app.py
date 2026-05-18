@@ -70,11 +70,11 @@ def extrair_dados_coleta(df_raw, termo_busca):
 
 def arredondamento_customizado_coluna_i(valor_float):
     """
-    Regra da Coluna I: Se a parte decimal for >= 0.50 arredonda para cima,
-    se for menor que 0.50 arredonda para baixo.
+    Regra do Excel: Se a casa decimal for maior ou igual a 50 -> número acima.
+    Se for menor que 50 -> número abaixo.
     """
     dec, int_part = math.modf(valor_float)
-    dec = round(dec, 4) # Evita dízimas de float
+    dec = round(dec, 4)
     if dec >= 0.50:
         return int(int_part + 1)
     else:
@@ -113,45 +113,50 @@ if siglas_input:
                             f_sacas = Decimal(str(qtd_sacas_escolhida))
                             d_peso_original = Decimal(str(p_original))
                             
-                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original)
+                            # 1. Peso Corrigido (Sacas * 3kg + Peso da planilha de coleta)
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
-                            # 2. Coluna I (Fibreboard): Regra customizada (Corte no 0.50)
+                            # 2. Fibreboard Boxes (Qtd Volumes da coleta / Sacas) com corte em 0.50
                             fracao_fib = q_volumes / qtd_sacas_escolhida
                             i_fibreboard = arredondamento_customizado_coluna_i(fracao_fib)
                             if i_fibreboard == 0: 
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Varredura Cirúrgica do Peso de Balança (Coluna J)
-                            # Partimos do valor exato teórico e ajustamos centavo por centavo
+                            # 3. Busca Global Absoluta do Peso Mínimo Positivo (Coluna J)
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
-                            j_inicio_float = math.floor(base_j_float * 100) / 100
                             
+                            # Começamos a varredura um pouco abaixo do valor teórico para cobrir todas as curvas decimais
+                            j_inicio_float = math.floor(base_j_float * 100) / 100 - 0.50
+                            if j_inicio_float < 0:
+                                j_inicio_float = 0.01
+                                
                             j_inicio = Decimal(f"{j_inicio_float:.2f}")
-                            perfeito_j = j_inicio
+                            perfeito_j = None
                             menor_saldo_positivo = Decimal('inf')
                             
-                            # Varre um intervalo seguro (até 10kg acima) buscando o menor erro positivo
-                            for acrescimo in range(1000): 
+                            # Varre um range amplo centavo por centavo (passo de 0.01)
+                            for acrescimo in range(2000): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # Formula da planilha: M = (Sacas * J * I) - G
+                                # Simulação da fórmula de conferência do Excel: M = (Sacas * J * I) - G
                                 l_total_destino = j_teste * i_fib_dec * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
-                                # Critério: M deve ser positivo ou zero, e o menor de todos os testados
+                                # CRITÉRIO DE OURO: Deve ser >= 0 E ser o menor resíduo de toda a varredura
                                 if m_conferencia >= 0:
                                     if m_conferencia < menor_saldo_positivo:
                                         menor_saldo_positivo = m_conferencia
                                         perfeito_j = j_teste
-                                        # Como a varredura é crescente, o primeiro >= 0 é o mais próximo de zero positivo
-                                        break
                             
+                            # Se por segurança a busca não achar, adota a base padrão arredondada
+                            if perfeito_j == None:
+                                perfeito_j = Decimal(f"{base_j_float:.2f}")
+
                             j7_kg_g = perfeito_j
                             k7_total_saca_final = j7_kg_g * i_fib_dec
 
-                            # 4. Formatação das variáveis do Word
+                            # 4. Formatação exata com duas casas decimais e vírgula
                             txt_fibreboard = str(int(i_fibreboard))
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
@@ -188,7 +193,7 @@ if siglas_input:
 
                 if emitidos:
                     zip_buffer.seek(0)
-                    st.success(f"✅ Perfeito! Shippers geradas com os valores exatos da referência para: {', '.join(emitidos)}")
+                    st.success(f"✅ Sucesso! Shippers geradas com os cálculos alinhados à folha de conferência manual para: {', '.join(emitidos)}")
                     st.download_button(
                         label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                         data=zip_buffer,
