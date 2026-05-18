@@ -38,16 +38,22 @@ def formatar_valor_br(valor):
         return str(valor).replace('.', ',')
 
 def extrair_dados_coleta(df_raw, termo_busca):
-    """Localiza a linha da cidade na planilha de coleta e pega Destino, Qtd (Col B) e Peso (Col C)"""
+    """Percorre TODA a planilha somando as quantidades e pesos de todas as linhas da mesma cidade"""
+    total_volumes = 0
+    total_peso = 0.0
+    destino_txt = None
+    encontrou_linha = False
+    
     for index, row in df_raw.iterrows():
         linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
         if termo_busca in linha_texto and "TOTAL" not in linha_texto:
             valores = list(row.values)
             
-            destino_txt = str(valores[0]).upper() if len(valores) > 0 else termo_busca
+            if not destino_txt and len(valores) > 0 and pd.notnull(valores[0]):
+                destino_txt = str(valores[0]).upper()
             
             # Quantidade (Segunda Coluna -> Índice 1)
-            qtd_volumes = 1
+            qtd_volumes = 0
             if len(valores) > 1 and pd.notnull(valores[1]):
                 try:
                     qtd_volumes = int(float(str(valores[1]).replace(',', '.')))
@@ -64,8 +70,16 @@ def extrair_dados_coleta(df_raw, termo_busca):
                         txt_p = txt_p.replace(",", ".")
                     peso_original = float(txt_p)
                 except: pass
-                
-            return destino_txt, qtd_volumes, peso_original
+            
+            total_volumes += qtd_volumes
+            total_peso += peso_original
+            encontrou_linha = True
+            
+    if encontrou_linha:
+        if not destino_txt:
+            destino_txt = termo_busca
+        return destino_txt, total_volumes, total_peso
+        
     return None, None, None
 
 # 2. SELETOR DE SACAS
@@ -94,6 +108,7 @@ if siglas_input:
                         cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
                         qtd_sacas_escolhida = sacas_manuais.get(sigla, 7)
                         
+                        # Agora destino_completo trará a SOMA de todas as NFs agrupadas da cidade
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                         if p_original is not None and p_original > 0:
@@ -101,7 +116,7 @@ if siglas_input:
                             f_sacas = Decimal(str(qtd_sacas_escolhida))
                             d_peso_original = Decimal(str(p_original))
                             
-                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original)
+                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original Somado)
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
                             # 2. Coluna I (Fibreboard): Arredondamento matemático exato
@@ -111,7 +126,7 @@ if siglas_input:
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Varredura Simulada do Peso de Balança da New Post (Lógica original restaurada)
+                            # 3. Varredura Simulada do Peso de Balança da New Post
                             base_j = (g_peso_corrigido / f_sacas) / i_fib_dec
                             j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
                             
@@ -142,7 +157,7 @@ if siglas_input:
                                 
                             k7_total_saca_final = (j7_kg_g * i_fib_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-                            # 4. Formatação das variáveis do Word corrigida
+                            # 4. Formatação das variáveis do Word
                             txt_fibreboard = str(int(i_fibreboard))
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
