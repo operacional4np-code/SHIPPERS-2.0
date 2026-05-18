@@ -68,6 +68,18 @@ def extrair_dados_coleta(df_raw, termo_busca):
             return destino_txt, qtd_volumes, peso_original
     return None, None, None
 
+def arredondamento_customizado_coluna_i(valor_float):
+    """
+    Regra da Coluna I: Se a parte decimal for >= 0.50 arredonda para cima,
+    se for menor que 0.50 arredonda para baixo.
+    """
+    dec, int_part = math.modf(valor_float)
+    dec = round(dec, 4) # Evita dízimas de float
+    if dec >= 0.50:
+        return int(int_part + 1)
+    else:
+        return int(int_part)
+
 # 2. SELETOR DE SACAS
 sacas_manuais = {}
 if siglas_input:
@@ -78,7 +90,7 @@ if siglas_input:
         default_val = 17 if sigla == "POA" else 7
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=default_val, step=1, key=f"sacas_{sigla}")
 
-    # Processamento principal do arquivo
+    # O botão fica visível se o arquivo for carregado
     if file:
         try:
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
@@ -97,51 +109,46 @@ if siglas_input:
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                         if p_original is not None and p_original > 0:
+                            
                             f_sacas = Decimal(str(qtd_sacas_escolhida))
                             d_peso_original = Decimal(str(p_original))
                             
-                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg de tara da saca + Peso Original da Planilha)
+                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original)
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
-                            # 2. Coluna I (Fibreboard): Quantidade exata de caixas por saca vinda da planilha
-                            # Usamos math.ceil para garantir o teto da divisão inteira de volumes por sacas
-                            i_fibreboard = math.ceil(q_volumes / qtd_sacas_escolhida)
+                            # 2. Coluna I (Fibreboard): Regra customizada (Corte no 0.50)
+                            fracao_fib = q_volumes / qtd_sacas_escolhida
+                            i_fibreboard = arredondamento_customizado_coluna_i(fracao_fib)
                             if i_fibreboard == 0: 
                                 i_fibreboard = 1
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Varredura Inteligente e Corrigida de Peso de Balança da Cia Aérea
-                            base_j = (g_peso_corrigido / f_sacas) / i_fib_dec
-                            j_inicio = base_j.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+                            # 3. Varredura Cirúrgica do Peso de Balança (Coluna J)
+                            # Partimos do valor exato teórico e ajustamos centavo por centavo
+                            base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
+                            j_inicio_float = math.floor(base_j_float * 100) / 100
                             
+                            j_inicio = Decimal(f"{j_inicio_float:.2f}")
                             perfeito_j = j_inicio
                             menor_saldo_positivo = Decimal('inf')
                             
-                            # Loop de teste centavo por centavo para validar o comportamento do fiscal
-                            for acrescimo in range(500): 
+                            # Varre um intervalo seguro (até 10kg acima) buscando o menor erro positivo
+                            for acrescimo in range(1000): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # Simula a regra de ouro: Caixas x Peso Unitário = Total da saca exato
-                                k_total_saca = j_teste * i_fib_dec
-                                l_total_destino = k_total_saca * f_sacas
+                                # Formula da planilha: M = (Sacas * J * I) - G
+                                l_total_destino = j_teste * i_fib_dec * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
-                                if sigla == "POA":
-                                    if j_teste == Decimal("4.14"):
+                                # Critério: M deve ser positivo ou zero, e o menor de todos os testados
+                                if m_conferencia >= 0:
+                                    if m_conferencia < menor_saldo_positivo:
+                                        menor_saldo_positivo = m_conferencia
                                         perfeito_j = j_teste
+                                        # Como a varredura é crescente, o primeiro >= 0 é o mais próximo de zero positivo
                                         break
-                                else:
-                                    if m_conferencia >= 0:
-                                        if m_conferencia < menor_saldo_positivo:
-                                            menor_saldo_positivo = m_conferencia
-                                            perfeito_j = j_teste
-                                            if m_conferencia == 0:
-                                                break
                             
                             j7_kg_g = perfeito_j
-                            if sigla == "POA":
-                                j7_kg_g = Decimal("4.14")
-                                
                             k7_total_saca_final = j7_kg_g * i_fib_dec
 
                             # 4. Formatação das variáveis do Word
@@ -169,19 +176,19 @@ if siglas_input:
                                 doc.save(doc_io)
                                 zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
                                 emitidos.append(sigla)
+                                
                             except Exception as e_doc:
                                 erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
                         else:
                             erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
 
-                # Exibição dos resultados na tela
                 if erros_cidades:
                     for err in erros_cidades:
                         st.warning(f"⚠️ {err}")
 
                 if emitidos:
                     zip_buffer.seek(0)
-                    st.success(f"✅ Perfeito! Shippers geradas com sucesso para: {', '.join(emitidos)}")
+                    st.success(f"✅ Perfeito! Shippers geradas com os valores exatos da referência para: {', '.join(emitidos)}")
                     st.download_button(
                         label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                         data=zip_buffer,
