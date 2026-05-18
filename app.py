@@ -124,7 +124,7 @@ perfeito_j = None
 menor_saldo_positivo = Decimal('inf')
 
 # Testando centavo por centavo para achar o menor resíduo positivo na conferência
-for acrescimo in range(2000): 
+for acrescimo in range(2000):
 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
 
 # M = (Sacas * J * I) - G
