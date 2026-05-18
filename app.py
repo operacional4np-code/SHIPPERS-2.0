@@ -40,7 +40,7 @@ for index, row in df_raw.iterrows():
 linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
 if termo_busca in linha_texto and "TOTAL" not in linha_texto:
 valores = list(row.values)
-            
+
 destino_txt = str(valores[0]).upper() if len(valores) > 0 else termo_busca
             
 # Quantidade (Segunda Coluna -> Índice 1)
