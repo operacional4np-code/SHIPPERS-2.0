@@ -152,4 +152,4 @@ if siglas_input:
                                 txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                                 txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
                                 
-                                marcacao_bruta = " ".join(
+                                marcacao_bruta = " ".join()
