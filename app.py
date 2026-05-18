@@ -28,15 +28,15 @@ file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", typ
 def formatar_valor_br(valor):
 """Garante a formatação com duas casas decimais e vírgula separando os centavos"""
 try:
-        if pd.isna(valor) or valor == "":
-            return "0,00"
-        return "{:.2f}".format(float(valor)).replace('.', ',')
-    except:
-        return str(valor).replace('.', ',')
+if pd.isna(valor) or valor == "":
+return "0,00"
+return "{:.2f}".format(float(valor)).replace('.', ',')
+except:
+return str(valor).replace('.', ',')
 
 def extrair_dados_coleta(df_raw, termo_busca):
     """Localiza a linha da cidade na planilha de coleta e pega Destino, Qtd (Col B) e Peso (Col C)"""
-    for index, row in df_raw.iterrows():
+for index, row in df_raw.iterrows():
         linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
         if termo_busca in linha_texto and "TOTAL" not in linha_texto:
             valores = list(row.values)
