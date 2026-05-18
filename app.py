@@ -5,7 +5,6 @@ import math
 import re
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
-# Importação do RichText adicionada aqui
 from docxtpl import DocxTemplate, RichText
 from zipfile import ZipFile
 
@@ -106,7 +105,6 @@ if siglas_input:
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
                             # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
-                            # Usando ROUND_HALF_UP puramente com Decimais: se a dízima for >= 0.50, vai para cima.
                             fracao_fib = Decimal(str(q_volumes)) / f_sacas
                             i_fibreboard = int(fracao_fib.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
                             
@@ -118,7 +116,6 @@ if siglas_input:
                             # 3. Varredura do Peso Unitário Ideal (Coluna J)
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
                             
-                            # Começa a busca um pouco abaixo do valor teórico para pegar o ponto de virada exato
                             j_inicio_float = math.floor(base_j_float * 100) / 100 - 0.50
                             if j_inicio_float < 0:
                                 j_inicio_float = 0.01
@@ -127,15 +124,12 @@ if siglas_input:
                             perfeito_j = None
                             menor_saldo_positivo = Decimal('inf')
                             
-                            # Testando centavo por centavo para achar o menor resíduo positivo na conferência
                             for acrescimo in range(2000): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # M = (Sacas * J * I) - G
                                 l_total_destino = j_teste * i_fib_dec * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
-                                # Critério: m_conferencia deve ser >= 0 e o menor possível
                                 if m_conferencia >= 0:
                                     if m_conferencia < menor_saldo_positivo:
                                         menor_saldo_positivo = m_conferencia
@@ -152,10 +146,9 @@ if siglas_input:
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
                             
-                            # Gerando o texto bruto das marcações
                             texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
                             
-                            # Criando objeto RichText configurado com Arial tamanho 8 (size 16 significa 8pt)
+                            # Criando RichText para forçar Arial tamanho 8 (size=16)
                             marcacao_formatada = RichText()
                             marcacao_formatada.add(texto_marcacao, font='Arial', size=16)
 
@@ -163,11 +156,41 @@ if siglas_input:
                                 'FIBREBOARD': txt_fibreboard,
                                 'PESO_G': txt_kg_g,
                                 'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': marcacao_formatada,  # Substituído pela versão formatada
+                                'MARCACAO': marcacao_formatada,
                                 'DATA': date.today().strftime('%d/%m/%Y'),
                                 'QTD_OVERPACK': int(qtd_sacas_escolhida)
                             }
 
                             try:
                                 caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
-                                doc =
+                                doc = DocxTemplate(caminho_template)
+                                doc.render(contexto)
+                                
+                                doc_io = io.BytesIO()
+                                doc.save(doc_io)
+                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
+                                emitidos.append(sigla)
+                                
+                            except Exception as e_doc:
+                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
+                        else:
+                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
+
+                if erros_cidades:
+                    for err in erros_cidades:
+                        st.warning(f"⚠️ {err}")
+
+                if emitidos:
+                    zip_buffer.seek(0)
+                    st.success(f"✅ Sucesso! Shippers geradas com a regra oficial aplicada para: {', '.join(emitidos)}")
+                    st.download_button(
+                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
+                        data=zip_buffer,
+                        file_name="Shippers_Final_NewPost.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Nenhuma Shipper pôde ser gerada.")
+        except Exception as e:
+            st.error(f"Erro no processamento interno do arquivo: {e}")
