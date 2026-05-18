@@ -148,8 +148,45 @@ if siglas_input:
                             
                             marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
 
-                            contexto = {}
+                            contexto = {
                                 'FIBREBOARD': txt_fibreboard,
                                 'PESO_G': txt_kg_g,
                                 'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': marc
+                                'MARCACAO': marcacao,
+                                'DATA': date.today().strftime('%d/%m/%Y'),
+                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
+                            }
+
+                            try:
+                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
+                                doc = DocxTemplate(caminho_template)
+                                doc.render(contexto)
+                                
+                                doc_io = io.BytesIO()
+                                doc.save(doc_io)
+                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
+                                emitidos.append(sigla)
+                            except Exception as e_doc:
+                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
+                        else:
+                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
+
+                # Exibição dos resultados na tela (dentro do bloco do botão para garantir a existência das variáveis)
+                if erros_cidades:
+                    for err in erros_cidades:
+                        st.warning(f"⚠️ {err}")
+
+                if emitidos:
+                    zip_buffer.seek(0)
+                    st.success(f"✅ Perfeito! Shippers geradas com sucesso para: {', '.join(emitidos)}")
+                    st.download_button(
+                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
+                        data=zip_buffer,
+                        file_name="Shippers_Final_NewPost.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Nenhuma Shipper pôde ser gerada.")
+        except Exception as e:
+            st.error(f"Erro no processamento interno do arquivo: {e}")
