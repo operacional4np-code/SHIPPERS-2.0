@@ -76,7 +76,7 @@ if siglas_input:
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
         value=None
-        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, step=1, key=f"sacas_{sigla}")
+        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", step=1, key=f"sacas_{sigla}")
 
     # O botão fica visível se o arquivo for carregado
     if file:
