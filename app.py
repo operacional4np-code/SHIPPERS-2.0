@@ -5,8 +5,7 @@ import math
 import re
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
-from docxtpl import DocxTemplate, RichText
-from docx.shared import Pt
+from docxtpl import DocxTemplate
 from zipfile import ZipFile
 
 # MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta
@@ -129,81 +128,3 @@ if siglas_input:
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
                                 if sigla == "POA":
-                                    if j_teste == Decimal("4.14"):
-                                        perfeito_j = j_teste
-                                        break
-                                else:
-                                    if m_conferencia >= 0:
-                                        if m_conferencia < menor_saldo_positivo:
-                                            menor_saldo_positivo = m_conferencia
-                                            perfeito_j = j_teste
-                                            if m_conferencia == 0:
-                                                break
-                            
-                            j7_kg_g = perfeito_j
-                            if sigla == "POA":
-                                j7_kg_g = Decimal("4.14")
-                                
-                            k7_total_saca_final = j7_kg_g * i_fib_dec
-
-                            # 4. Formatação das variáveis do Word
-                            txt_fibreboard = str(int(i_fibreboard))
-                            txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
-                            txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
-                            
-                            # AJUSTE CRÍTICO DE MARGEM: Organiza as etiquetas em linhas bem curtas de no máximo 5 itens
-                            # Utiliza o caractere especial '\v' (Soft Return / Line Break simples do Word) para não criar parágrafos largos
-                            rt_marcacao = RichText()
-                            etiquetas = [f"#{i+1}" for i in range(int(qtd_sacas_escolhida))]
-                            
-                            for idx, etq in enumerate(etiquetas):
-                                rt_marcacao.add(etq, font="Arial Black", size=Pt(8), bold=False)
-                                if idx < len(etiquetas) - 1:
-                                    # Quebra a linha a cada 5 etiquetas para manter o bloco vertical compacto
-                                    if (idx + 1) % 5 == 0:
-                                        rt_marcacao.add("\v")
-                                    else:
-                                        rt_marcacao.add(" ")
-
-                            contexto = {
-                                'FIBREBOARD': txt_fibreboard,
-                                'PESO_G': txt_kg_g,
-                                'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': rt_marcacao,
-                                'DATA': date.today().strftime('%d/%m/%Y'),
-                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
-                            }
-
-                            try:
-                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
-                                doc = DocxTemplate(caminho_template)
-                                doc.render(contexto)
-                                
-                                doc_io = io.BytesIO()
-                                doc.save(doc_io)
-                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
-                                emitidos.append(sigla)
-                            except Exception as e_doc:
-                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
-                        else:
-                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
-
-                # Exibição dos resultados na tela
-                if erros_cidades:
-                    for err in erros_cidades:
-                        st.warning(f"⚠️ {err}")
-
-                if emitidos:
-                    zip_buffer.seek(0)
-                    st.success(f"✅ Perfeito! Shippers geradas com sucesso para: {', '.join(emitidos)}")
-                    st.download_button(
-                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
-                        data=zip_buffer,
-                        file_name="Shippers_Final_NewPost.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("Nenhuma Shipper pôde ser gerada.")
-        except Exception as e:
-            st.error(f"Erro no processamento interno do arquivo: {e}")
