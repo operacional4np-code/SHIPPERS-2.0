@@ -151,18 +151,17 @@ if siglas_input:
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
                             
-                            # Ajuste da Marcação para evitar quebra de página:
-                            # Divide em linhas se houverem muitas etiquetas (máximo 10 por linha)
+                            # AJUSTE CRÍTICO DE MARGEM: Organiza as etiquetas em linhas bem curtas de no máximo 5 itens
+                            # Utiliza o caractere especial '\v' (Soft Return / Line Break simples do Word) para não criar parágrafos largos
                             rt_marcacao = RichText()
                             etiquetas = [f"#{i+1}" for i in range(int(qtd_sacas_escolhida))]
                             
                             for idx, etq in enumerate(etiquetas):
                                 rt_marcacao.add(etq, font="Arial Black", size=Pt(8), bold=False)
-                                # Adiciona espaço entre as etiquetas, exceto na última da linha
                                 if idx < len(etiquetas) - 1:
-                                    # Se chegou no limite de 10 itens na linha, insere uma quebra de linha física (\n)
-                                    if (idx + 1) % 10 == 0:
-                                        rt_marcacao.add("\n")
+                                    # Quebra a linha a cada 5 etiquetas para manter o bloco vertical compacto
+                                    if (idx + 1) % 5 == 0:
+                                        rt_marcacao.add("\v")
                                     else:
                                         rt_marcacao.add(" ")
 
