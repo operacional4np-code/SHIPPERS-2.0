@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pdf
+import pandas as pd
 import io
 import math
 import re
