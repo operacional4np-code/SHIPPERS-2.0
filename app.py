@@ -76,7 +76,7 @@ if siglas_input:
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
         default_val = 17 if sigla == "POA" else 7
-        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=none, value=default_val, step=1, key=f"sacas_{sigla}")
+        sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=0, value=default_val, step=1, key=f"sacas_{sigla}")
 
     # Processamento principal do arquivo
     if file:
