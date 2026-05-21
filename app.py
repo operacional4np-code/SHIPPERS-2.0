@@ -25,7 +25,7 @@ st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
-# 1. ENTRADAS DE DADOS (Alterado para vir em branco por padrão)
+# 1. ENTRADAS DE DADOS (Campos limpos por padrão)
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
@@ -76,7 +76,7 @@ if siglas_input:
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
-        # Alterado: O valor padrão agora inicia em 0 e obriga o usuário a preencher
+        # Inicia zerado por padrão
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=0, value=0, step=1, key=f"sacas_{sigla}")
 
     # Processamento principal do arquivo
@@ -99,6 +99,7 @@ if siglas_input:
                             erros_cidades.append(f"{sigla} (Digite uma quantidade de sacas maior que 0)")
                             continue
                         
+                        # CORRIGIDO: Removida a linha duplicada com o argumento incorreto 'city_alvo'
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                         if p_original is not None and p_original > 0:
@@ -139,3 +140,63 @@ if siglas_input:
                                             perfeito_j = j_teste
                                             if m_conferencia == 0:
                                                 break
+                            
+                            j7_kg_g = perfeito_j
+                            if sigla == "POA":
+                                j7_kg_g = Decimal("4.14")
+                                
+                            k7_total_saca_final = j7_kg_g * i_fib_dec
+
+                            # 4. Formatação das variáveis do Word
+                            txt_fibreboard = str(int(i_fibreboard))
+                            txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
+                            txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
+                            
+                            texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
+                            
+                            # Customização Estrita da Tag MARCACAO (Arial Black, Tamanho 8, Sem Negrito)
+                            rt_marcacao = RichText()
+                            rt_marcacao.add(texto_marcacao, font="Arial Black", size=Pt(8), bold=False)
+
+                            contexto = {
+                                'FIBREBOARD': txt_fibreboard,
+                                'PESO_G': txt_kg_g,
+                                'TOTAL_OVERPACK': txt_total_ovp,
+                                'MARCACAO': rt_marcacao,
+                                'DATA': date.today().strftime('%d/%m/%Y'),
+                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
+                            }
+
+                            try:
+                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
+                                doc = DocxTemplate(caminho_template)
+                                doc.render(contexto)
+                                
+                                doc_io = io.BytesIO()
+                                doc.save(doc_io)
+                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
+                                emitidos.append(sigla)
+                            except Exception as e_doc:
+                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
+                        else:
+                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
+
+                # Exibição dos resultados na tela
+                if erros_cidades:
+                    for err in erros_cidades:
+                        st.warning(f"⚠️ {err}")
+
+                if emitidos:
+                    zip_buffer.seek(0)
+                    st.success(f"✅ Perfeito! Shippers geradas com sucesso para: {', '.join(emitidos)}")
+                    st.download_button(
+                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
+                        data=zip_buffer,
+                        file_name="Shippers_Final_NewPost.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Nenhuma Shipper pôde ser gerada.")
+        except Exception as e:
+            st.error(f"Erro no processamento interno do arquivo: {e}")
