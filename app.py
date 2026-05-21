@@ -99,7 +99,6 @@ if siglas_input:
                             erros_cidades.append(f"{sigla} (Digite uma quantidade de sacas maior que 0)")
                             continue
                         
-                        # CORRIGIDO: Removida a linha duplicada com o argumento incorreto 'city_alvo'
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                         if p_original is not None and p_original > 0:
@@ -152,11 +151,20 @@ if siglas_input:
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
                             
-                            texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
-                            
-                            # Customização Estrita da Tag MARCACAO (Arial Black, Tamanho 8, Sem Negrito)
+                            # Ajuste da Marcação para evitar quebra de página:
+                            # Divide em linhas se houverem muitas etiquetas (máximo 10 por linha)
                             rt_marcacao = RichText()
-                            rt_marcacao.add(texto_marcacao, font="Arial Black", size=Pt(8), bold=False)
+                            etiquetas = [f"#{i+1}" for i in range(int(qtd_sacas_escolhida))]
+                            
+                            for idx, etq in enumerate(etiquetas):
+                                rt_marcacao.add(etq, font="Arial Black", size=Pt(8), bold=False)
+                                # Adiciona espaço entre as etiquetas, exceto na última da linha
+                                if idx < len(etiquetas) - 1:
+                                    # Se chegou no limite de 10 itens na linha, insere uma quebra de linha física (\n)
+                                    if (idx + 1) % 10 == 0:
+                                        rt_marcacao.add("\n")
+                                    else:
+                                        rt_marcacao.add(" ")
 
                             contexto = {
                                 'FIBREBOARD': txt_fibreboard,
