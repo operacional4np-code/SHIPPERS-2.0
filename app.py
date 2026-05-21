@@ -25,7 +25,7 @@ st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
 # 1. ENTRADAS DE DADOS
-siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="CWB").upper().strip()
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
 def formatar_valor_br(valor):
@@ -90,7 +90,7 @@ if siglas_input:
                 with ZipFile(zip_buffer, "w") as zip_file:
                     for sigla in lista_siglas:
                         cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                        qtd_sacas_escolhida = sacas_manuais.get(sigla, 7)
+                        qtd_sacas_escolhida = sacas_manuais.get
                         
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
