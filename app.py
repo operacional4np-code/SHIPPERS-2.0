@@ -4,7 +4,7 @@ import io
 import math
 import re
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from docxtpl import DocxTemplate
 from zipfile import ZipFile
 
@@ -22,11 +22,11 @@ MAPA_DESTINOS = {
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
-st.subheader("Cálculo Autônomo")
+st.subheader("Cálculo Autônomo Alinhado com Planilha Modelo")
 
 # 1. ENTRADAS DE DADOS
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
-file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
+file = st.file_uploader("2. Carregue a Planilha de Coleta", type=["xlsm", "xlsx"])
 
 def formatar_valor_br(valor):
     """Garante a formatação com duas casas decimais e vírgula separando os centavos"""
@@ -38,31 +38,36 @@ def formatar_valor_br(valor):
         return str(valor).replace('.', ',')
 
 def extrair_dados_coleta(df_raw, termo_busca):
-    """Localiza a linha da cidade e extrai Qtd e Peso de forma dinâmica, ignorando colunas vazias"""
+    """
+    Busca o destino na Coluna A (Índice 0), 
+    Quantidade na Coluna B (Índice 1) e Peso na Coluna C (Índice 2).
+    """
     for index, row in df_raw.iterrows():
-        # Transforma a linha inteira em texto para buscar a cidade
-        linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
-        
-        if termo_busca in linha_texto and "TOTAL" not in linha_texto:
-            numeros = []
+        # Verifica se a linha tem pelo menos as 3 colunas necessárias
+        if len(row) >= 3:
+            val_a = str(row.iloc[0]).upper().strip() if pd.notnull(row.iloc[0]) else ""
             
-            # Varre as células da linha da esquerda para a direita
-            for val in row.values:
-                if pd.notnull(val):
-                    # Se já for número nativo do Excel
-                    if isinstance(val, (int, float)):
-                        numeros.append(float(val))
+            # Procura o termo de busca na coluna A (ex: "CUIABA" ou "CGB")
+            if termo_busca in val_a and "TOTAL" not in val_a:
+                try:
+                    # Lê quantidade (Coluna B)
+                    val_b = row.iloc[1]
+                    if isinstance(val_b, (int, float)):
+                        qtd_volumes = int(val_b)
                     else:
-                        # Se for texto, tenta limpar e converter para número
-                        txt = str(val).strip()
-                        if re.match(r'^-?\d+([.,]\d+)?$', txt):
-                            numeros.append(float(txt.replace(',', '.')))
-            
-            # O primeiro número da linha é sempre a QNTD, o segundo é o PESO
-            if len(numeros) >= 2:
-                qtd_volumes = int(numeros[0])
-                peso_original = float(numeros[1])
-                return termo_busca, qtd_volumes, peso_original
+                        qtd_volumes = int(float(str(val_b).replace(',', '.').strip()))
+                    
+                    # Lê peso (Coluna C)
+                    val_c = row.iloc[2]
+                    if isinstance(val_c, (int, float)):
+                        peso_original = float(val_c)
+                    else:
+                        peso_original = float(str(val_c).replace(',', '.').strip())
+                        
+                    return termo_busca, qtd_volumes, peso_original
+                except Exception as e:
+                    # Se houver erro de conversão nessa linha específica, continua procurando
+                    continue
                 
     return None, None, None
 
@@ -79,6 +84,7 @@ if siglas_input:
 
     if file and todas_sacas_preenchidas:
         try:
+            # Carrega a planilha sem pular cabeçalhos para mapear as colunas brutas por índice
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
             
             st.markdown("---")
@@ -99,13 +105,11 @@ if siglas_input:
                             f_sacas = Decimal(str(qtd_sacas_escolhida))
                             d_peso_original = Decimal(str(p_original))
                             
-                            # 1. Coluna G: Peso Corrigido (Sacas * 3kg + Peso Original da Coleta)
+                            # Coluna G: Peso Corrigido = (Sacas * 3kg) + Peso Original
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
-                            # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
+                            # Coluna I: Fibreboard Boxes = Qtd Volumes / Sacas (Com arredondamento padrão >= 0.5 sobe)
                             fracao_fib = float(q_volumes) / float(qtd_sacas_escolhida)
-                            
-                            # Regra de arredondamento oficial: >= 0.50 sobe, < 0.50 desce
                             decimal_part = fracao_fib - math.floor(fracao_fib)
                             if decimal_part >= 0.50:
                                 i_fibreboard = math.floor(fracao_fib) + 1
@@ -117,39 +121,41 @@ if siglas_input:
 
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Coluna J: Ajustada Varredura matemática precisa por Saco (Overpack)
+                            # Varredura idêntica à lógica de menor resíduo positivo da coluna M:
+                            # Formula da tabela: M = (J * I * Sacas) - G
+                            # Queremos o menor J com duas casas decimais onde M >= 0
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
-                            j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 1.00)
+                            j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
                             j_inicio = Decimal(f"{j_inicio_float:.2f}")
                             
                             perfeito_j = None
                             
-                            # Varre centavo por centavo buscando o equilíbrio exato da divisão distribuída pelas sacas
-                            for acrescimo in range(3000): 
+                            for acrescimo in range(1000): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # Peso arredondado de um Overpack isolado (Fibreboard * Peso Unitário)
-                                peso_um_overpack = (j_teste * i_fib_dec).quantize(Decimal('0.01'))
+                                # Simulando a fórmula das colunas K e L do Excel:
+                                # K (Peso saca) = J * I
+                                # L (Peso Total) = K * Sacas
+                                k_peso_saca = j_teste * i_fib_dec
+                                l_total_destino = k_peso_saca * f_sacas
                                 
-                                # Peso total final real que vai ser impresso/despachado
-                                l_total_destino = peso_um_overpack * f_sacas
-                                
-                                # Conferência em relação ao peso mínimo necessário corrigido
+                                # M (Conferência) = L - G
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
-                                if m_conferencia >= 0:
+                                # Procura o primeiro valor onde a conferência não seja negativa
+                                if m_conferencia >= Decimal('0'):
                                     perfeito_j = j_teste
                                     break
                             
                             if perfeito_j is None:
-                                perfeito_j = Decimal(f"{base_j_float:.2f}")
+                                perfeito_j = Decimal(f"{base_j_float:.2f}").quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
                             j7_kg_g = perfeito_j
                             
-                            # 4. Coluna K: Total Quantity per Overpack calculado de forma estrita (J * I)
-                            k7_total_saca_final = (j7_kg_g * i_fib_dec).quantize(Decimal('0.01'))
+                            # Coluna K: Total Quantity per Overpack (J * I)
+                            k7_total_saca_final = j7_kg_g * i_fib_dec
 
-                            # 5. Formatação das variáveis para enviar ao Word
+                            # Formatação das variáveis para o Word
                             txt_fibreboard = str(int(i_fibreboard))
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
@@ -178,7 +184,7 @@ if siglas_input:
                             except Exception as e_doc:
                                 erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
                         else:
-                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos da planilha de coleta)")
+                            erros_cidades.append(f"{sigla} (Não foi possível extrair dados válidos para {sigla} nas colunas A, B e C)")
 
                 if erros_cidades:
                     for err in erros_cidades:
@@ -186,7 +192,7 @@ if siglas_input:
 
                 if emitidos:
                     zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas com a regra oficial aplicada para: {', '.join(emitidos)}")
+                    st.success(f"✅ Sucesso! Shippers geradas com os cálculos idênticos ao modelo oficial para: {', '.join(emitidos)}")
                     st.download_button(
                         label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                         data=zip_buffer,
