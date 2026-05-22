@@ -5,7 +5,7 @@ import math
 import re
 from datetime import date
 from decimal import Decimal
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, RichText
 from zipfile import ZipFile
 
 # MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta
@@ -33,7 +33,6 @@ def extrair_dados_coleta(df_raw, termo_busca):
     Localiza a tabela dinamicamente na planilha, acha o cabeçalho correto,
     e captura os dados filtrando os prefixos/sufixos como 'AGF' e 'MT'.
     """
-    # 1. Encontrar em qual linha está o cabeçalho real da tabela (DESTINO, QNTDE, PESO)
     linha_cabecalho = None
     idx_destino, idx_qntde, idx_peso = None, None, None
     
@@ -41,7 +40,6 @@ def extrair_dados_coleta(df_raw, termo_busca):
         valores = [str(v).strip().upper() for v in row.values if pd.notnull(v)]
         if "DESTINO" in valores and ("QNTDE" in valores or "QNTD" in valores) and "PESO" in valores:
             linha_cabecalho = idx
-            # Mapeia os índices exatos das colunas por nome
             valores_linha_lista = [str(v).strip().upper() for v in row.values]
             idx_destino = valores_linha_lista.index("DESTINO")
             
@@ -54,7 +52,6 @@ def extrair_dados_coleta(df_raw, termo_busca):
             break
             
     if linha_cabecalho is None:
-        # Se não achar o cabeçalho textual, tenta busca genérica linha por linha
         for idx, row in df_raw.iterrows():
             linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
             if termo_busca in linha_texto and "TOTAL" not in linha_texto:
@@ -66,25 +63,20 @@ def extrair_dados_coleta(df_raw, termo_busca):
                     return termo_busca, int(numeros[0]), float(numeros[1])
         return None, None, None
 
-    # 2. Varre as linhas abaixo do cabeçalho mapeado para extrair a informação correta
     for idx in range(linha_cabecalho + 1, len(df_raw)):
         row = df_raw.iloc[idx]
         val_destino = str(row.iloc[idx_destino]).strip().upper() if pd.notnull(row.iloc[idx_destino]) else ""
         
-        # Ignora linhas de controle de código ou totais
         if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
             continue
             
-        # Normaliza o texto removendo 'AGF' e as siglas dos estados para a comparação perfeita
         destino_limpo = val_destino.replace("AGF", "").replace(" MT", "").replace(" MS", "").replace(" PR", "").replace(" SC", "").replace(" GO", "").replace(" AM", "").replace(" RS", "").replace(" RO", "").strip()
         
         if termo_busca in destino_limpo or destino_limpo in termo_busca:
             try:
-                # Captura e trata Quantidade
                 val_q = row.iloc[idx_qntde]
                 qtd_volumes = int(float(str(val_q).replace(',', '.').strip())) if not isinstance(val_q, (int, float)) else int(val_q)
                 
-                # Captura e trata Peso
                 val_p = row.iloc[idx_peso]
                 peso_original = float(str(val_p).replace(',', '.').strip()) if not isinstance(val_p, (int, float)) else float(val_p)
                 
@@ -110,122 +102,3 @@ if siglas_input:
     if file and todas_sacas_preenchidas:
         try:
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
-            
-            st.markdown("---")
-            if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
-                zip_buffer = io.BytesIO()
-                emitidos = []
-                erros_cidades = []
-                dados_conferencia = []
-
-                with ZipFile(zip_buffer, "w") as zip_file:
-                    for sigla in lista_siglas:
-                        cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                        qtd_sacas_escolhida = sacas_manuais.get(sigla)
-                        
-                        destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
-
-                        if p_original is not None and p_original > 0:
-                            f_sacas = Decimal(str(qtd_sacas_escolhida))
-                            d_peso_original = Decimal(str(p_original))
-                            
-                            # Coluna G: Peso Corrigido
-                            g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
-                            
-                            # Coluna I: Fibreboard Boxes
-                            fracao_fib = float(q_volumes) / float(qtd_sacas_escolhida)
-                            decimal_part = fracao_fib - math.floor(fracao_fib)
-                            if decimal_part >= 0.50:
-                                i_fibreboard = math.floor(fracao_fib) + 1
-                            else:
-                                i_fibreboard = math.floor(fracao_fib)
-                                
-                            if i_fibreboard == 0: 
-                                i_fibreboard = 1
-
-                            i_fib_dec = Decimal(str(i_fibreboard))
-                            
-                            # Varredura centavo por centavo espelhada no Excel (Coluna M)
-                            base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
-                            j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
-                            j_inicio = Decimal(f"{j_inicio_float:.2f}")
-                            
-                            perfeito_j = None
-                            for acrescimo in range(1500): 
-                                j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
-                                l_total_destino = j_teste * i_fib_dec * f_sacas
-                                m_conferencia = l_total_destino - g_peso_corrigido
-                                
-                                if m_conferencia >= Decimal('0'):
-                                    perfeito_j = j_teste
-                                    break
-                            
-                            if perfeito_j is None:
-                                perfeito_j = Decimal(f"{base_j_float:.2f}")
-
-                            j7_kg_g = perfeito_j
-                            k7_total_saca_final = j7_kg_g * i_fib_dec
-
-                            # Alimenta relatório visual
-                            dados_conferencia.append({
-                                "Destino": sigla,
-                                "Cidade Localizada": cidade_alvo,
-                                "Qtd Volumes": q_volumes,
-                                "Peso Original (Kg)": float(p_original),
-                                "Fibreboard Boxes (I)": int(i_fibreboard),
-                                "Peso Unitário Kg G (J)": float(j7_kg_g),
-                                "Total Overpack (K)": float(k7_total_saca_final)
-                            })
-
-                            # Tratamento dos textos para o Word
-                            txt_fibreboard = str(int(i_fibreboard))
-                            txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
-                            txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
-                            marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
-
-                            contexto = {
-                                'FIBREBOARD': txt_fibreboard,
-                                'PESO_G': txt_kg_g,
-                                'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': marcacao,
-                                'DATA': date.today().strftime('%d/%m/%Y'),
-                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
-                            }
-
-                            try:
-                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
-                                doc = DocxTemplate(caminho_template)
-                                doc.render(contexto)
-                                
-                                doc_io = io.BytesIO()
-                                doc.save(doc_io)
-                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
-                                emitidos.append(sigla)
-                                
-                            except Exception as e_doc:
-                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
-                        else:
-                            erros_cidades.append(f"{sigla} (Não foi possível obter dados válidos para {cidade_alvo})")
-
-                if dados_conferencia:
-                    st.markdown("### 📊 Relatório de Conferência da Planilha:")
-                    st.dataframe(pd.DataFrame(dados_conferencia), use_container_width=True)
-
-                if erros_cidades:
-                    for err in erros_cidades:
-                        st.warning(f"⚠️ {err}")
-
-                if emitidos:
-                    zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas com os valores exatos e corrigidos.")
-                    st.download_button(
-                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
-                        data=zip_buffer,
-                        file_name="Shippers_Final_NewPost.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("Nenhuma Shipper pôde ser gerada.")
-        except Exception as e:
-            st.error(f"Erro no processamento interno do arquivo: {e}")
