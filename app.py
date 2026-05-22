@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import io
 import math
-import re
 from datetime import date
 from decimal import Decimal
 from docxtpl import DocxTemplate
@@ -22,16 +21,14 @@ MAPA_DESTINOS = {
     "FLN PRIME": "PRIME-SC FLORIANÓPOLIS"
 }
 
-st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
+st.set_page_config(page_title="Gerador de Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
-st.subheader("Cálculo Autônomo Oficial")
 
 # 1. ENTRADAS DE DADOS
 siglas_input = st.text_input("1. Digite as Siglas (Ex: CGB, POA, POA PRIME):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Base)", type=["xlsm", "xlsx"])
 
 def extrair_dados_coleta(df_raw, termo_busca):
-    # Procura pelo cabeçalho dinâmico
     linha_cabecalho = None
     idx_destino, idx_qntde, idx_peso = None, None, None
     
@@ -51,15 +48,11 @@ def extrair_dados_coleta(df_raw, termo_busca):
         row = df_raw.iloc[idx]
         val_destino = str(row.iloc[idx_destino]).strip().upper() if pd.notnull(row.iloc[idx_destino]) else ""
         
-        # Lógica especial para o PRIME
+        # Filtro especial para termos PRIME
         if "PRIME" in termo_busca:
-            if termo_busca in val_destino:
-                pass # Achou o destino específico
-            else:
-                continue
+            if termo_busca not in val_destino: continue
         else:
             if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit(): continue
-            # Limpeza padrão para outros destinos
             destino_limpo = val_destino.replace("AGF", "").replace(" MT", "").replace(" MS", "").replace(" PR", "").replace(" SC", "").replace(" GO", "").replace(" AM", "").replace(" RS", "").replace(" RO", "").strip()
             if termo_busca not in destino_limpo and destino_limpo not in termo_busca: continue
 
@@ -72,12 +65,10 @@ def extrair_dados_coleta(df_raw, termo_busca):
         except: continue
     return None, None, None
 
-# 2. SELETOR DE SACAS
+# 2. SELETOR DE SACAS (Exibição forçada)
 sacas_manuais = {}
-if siglas_input:
-    lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
-    st.markdown("### 3. Informe a quantidade de sacas:")
-    cols = st.columns(len(lista_siglas))
-    for idx, sigla in enumerate(lista_siglas):
-        with cols[idx]:
-            sacas_manuais[sigla] = st
+lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
+
+if lista_siglas:
+    st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
+    cols = st.columns(len
