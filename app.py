@@ -22,7 +22,7 @@ MAPA_DESTINOS = {
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
 st.title("📄 Gerador de Shippers New Post")
-st.subheader("Cálculo Autônomo Alinhado")
+st.subheader("Cálculo Autônomo Oficial")
 
 # 1. ENTRADAS DE DADOS
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
@@ -30,31 +30,67 @@ file = st.file_uploader("2. Carregue a Planilha de Coleta (Base)", type=["xlsm",
 
 def extrair_dados_coleta(df_raw, termo_busca):
     """
-    Varre a planilha dinamicamente procurando a linha que contém o DESTINO.
-    Identifica de forma inteligente a coluna de Quantidade e Peso daquela linha.
+    Localiza a tabela dinamicamente na planilha, acha o cabeçalho correto,
+    e captura os dados filtrando os prefixos/sufixos como 'AGF' e 'MT'.
     """
-    for index, row in df_raw.iterrows():
-        # Transforma os valores da linha em texto limpo para localizar a cidade
-        valores_linha = [str(val).strip().upper() for val in row.values if pd.notnull(val)]
-        linha_texto = " ".join(valores_linha)
-        
-        if termo_busca in linha_texto and "TOTAL" not in linha_texto:
-            numeros_linha = []
-            # Captura todos os números válidos daquela linha da esquerda para a direita
-            for val in row.values:
-                if pd.notnull(val):
-                    if isinstance(val, (int, float)):
-                        numeros_linha.append(float(val))
-                    else:
-                        txt = str(val).strip().replace(',', '.')
-                        if re.match(r'^-?\d+([.,]\d+)?$', txt):
-                            numeros_linha.append(float(txt))
+    # 1. Encontrar em qual linha está o cabeçalho real da tabela (DESTINO, QNTDE, PESO)
+    linha_cabecalho = None
+    idx_destino, idx_qntde, idx_peso = None, None, None
+    
+    for idx, row in df_raw.iterrows():
+        valores = [str(v).strip().upper() for v in row.values if pd.notnull(v)]
+        if "DESTINO" in valores and ("QNTDE" in valores or "QNTD" in valores) and "PESO" in valores:
+            linha_cabecalho = idx
+            # Mapeia os índices exatos das colunas por nome
+            valores_linha_lista = [str(v).strip().upper() for v in row.values]
+            idx_destino = valores_linha_lista.index("DESTINO")
             
-            # O primeiro número é sempre a Qtd de Volumes e o segundo é o Peso
-            if len(numeros_linha) >= 2:
-                qtd_volumes = int(numeros_linha[0])
-                peso_original = float(numeros_linha[1])
+            if "QNTDE" in valores_linha_lista:
+                idx_qntde = valores_linha_lista.index("QNTDE")
+            elif "QNTD" in valores_linha_lista:
+                idx_qntde = valores_linha_lista.index("QNTD")
+                
+            idx_peso = valores_linha_lista.index("PESO")
+            break
+            
+    if linha_cabecalho is None:
+        # Se não achar o cabeçalho textual, tenta busca genérica linha por linha
+        for idx, row in df_raw.iterrows():
+            linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
+            if termo_busca in linha_texto and "TOTAL" not in linha_texto:
+                numeros = []
+                for val in row.values:
+                    if pd.notnull(val) and isinstance(val, (int, float)):
+                        numeros.append(float(val))
+                if len(numeros) >= 2:
+                    return termo_busca, int(numeros[0]), float(numeros[1])
+        return None, None, None
+
+    # 2. Varre as linhas abaixo do cabeçalho mapeado para extrair a informação correta
+    for idx in range(linha_cabecalho + 1, len(df_raw)):
+        row = df_raw.iloc[idx]
+        val_destino = str(row.iloc[idx_destino]).strip().upper() if pd.notnull(row.iloc[idx_destino]) else ""
+        
+        # Ignora linhas de controle de código ou totais
+        if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
+            continue
+            
+        # Normaliza o texto removendo 'AGF' e as siglas dos estados para a comparação perfeita
+        destino_limpo = val_destino.replace("AGF", "").replace(" MT", "").replace(" MS", "").replace(" PR", "").replace(" SC", "").replace(" GO", "").replace(" AM", "").replace(" RS", "").replace(" RO", "").strip()
+        
+        if termo_busca in destino_limpo or destino_limpo in termo_busca:
+            try:
+                # Captura e trata Quantidade
+                val_q = row.iloc[idx_qntde]
+                qtd_volumes = int(float(str(val_q).replace(',', '.').strip())) if not isinstance(val_q, (int, float)) else int(val_q)
+                
+                # Captura e trata Peso
+                val_p = row.iloc[idx_peso]
+                peso_original = float(str(val_p).replace(',', '.').strip()) if not isinstance(val_p, (int, float)) else float(val_p)
+                
                 return termo_busca, qtd_volumes, peso_original
+            except:
+                continue
                 
     return None, None, None
 
@@ -73,7 +109,6 @@ if siglas_input:
 
     if file and todas_sacas_preenchidas:
         try:
-            # Carrega a planilha bruta ignorando cabeçalhos automáticos para fazermos a busca manual
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
             
             st.markdown("---")
@@ -81,8 +116,6 @@ if siglas_input:
                 zip_buffer = io.BytesIO()
                 emitidos = []
                 erros_cidades = []
-
-                # Tabela de conferência visual para o usuário no Streamlit
                 dados_conferencia = []
 
                 with ZipFile(zip_buffer, "w") as zip_file:
@@ -96,10 +129,10 @@ if siglas_input:
                             f_sacas = Decimal(str(qtd_sacas_escolhida))
                             d_peso_original = Decimal(str(p_original))
                             
-                            # Coluna G: Peso Corrigido = (Sacas * 3) + Peso da Coleta
+                            # Coluna G: Peso Corrigido
                             g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
                             
-                            # Coluna I: Fibreboard Boxes = Volumes / Sacas (Arredondamento oficial)
+                            # Coluna I: Fibreboard Boxes
                             fracao_fib = float(q_volumes) / float(qtd_sacas_escolhida)
                             decimal_part = fracao_fib - math.floor(fracao_fib)
                             if decimal_part >= 0.50:
@@ -112,14 +145,13 @@ if siglas_input:
 
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # Varredura centavo por centavo baseada na Coluna M da sua planilha:
-                            # M = (J * I * Sacas) - G. Buscando o menor J onde M >= 0
+                            # Varredura centavo por centavo espelhada no Excel (Coluna M)
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
                             j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
                             j_inicio = Decimal(f"{j_inicio_float:.2f}")
                             
                             perfeito_j = None
-                            for acrescimo in range(1000): 
+                            for acrescimo in range(1500): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 l_total_destino = j_teste * i_fib_dec * f_sacas
                                 m_conferencia = l_total_destino - g_peso_corrigido
@@ -132,21 +164,20 @@ if siglas_input:
                                 perfeito_j = Decimal(f"{base_j_float:.2f}")
 
                             j7_kg_g = perfeito_j
-                            
-                            # Coluna K: Total Quantity per Overpack (J * I)
                             k7_total_saca_final = j7_kg_g * i_fib_dec
 
-                            # Guarda os dados para exibir o relatório de conferência na tela
+                            # Alimenta relatório visual
                             dados_conferencia.append({
                                 "Destino": sigla,
-                                "Qtd Volumes Encontrada": q_volumes,
-                                "Peso Encontrado (Kg)": float(p_original),
+                                "Cidade Localizada": cidade_alvo,
+                                "Qtd Volumes": q_volumes,
+                                "Peso Original (Kg)": float(p_original),
                                 "Fibreboard Boxes (I)": int(i_fibreboard),
                                 "Peso Unitário Kg G (J)": float(j7_kg_g),
                                 "Total Overpack (K)": float(k7_total_saca_final)
                             })
 
-                            # Formatação final de texto para preencher as tags do Word
+                            # Tratamento dos textos para o Word
                             txt_fibreboard = str(int(i_fibreboard))
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
@@ -174,11 +205,10 @@ if siglas_input:
                             except Exception as e_doc:
                                 erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
                         else:
-                            erros_cidades.append(f"{sigla} (Não foi possível localizar dados válidos na linha deste destino)")
+                            erros_cidades.append(f"{sigla} (Não foi possível obter dados válidos para {cidade_alvo})")
 
-                # Exibe a tabela de conferência na tela para você validar antes de baixar
                 if dados_conferencia:
-                    st.markdown("### 📊 Relatório de Conferência dos Cálculos Gerados:")
+                    st.markdown("### 📊 Relatório de Conferência da Planilha:")
                     st.dataframe(pd.DataFrame(dados_conferencia), use_container_width=True)
 
                 if erros_cidades:
@@ -187,7 +217,7 @@ if siglas_input:
 
                 if emitidos:
                     zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas com sucesso.")
+                    st.success(f"✅ Sucesso! Shippers geradas com os valores exatos e corrigidos.")
                     st.download_button(
                         label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                         data=zip_buffer,
