@@ -8,7 +8,7 @@ from decimal import Decimal
 from docxtpl import DocxTemplate
 from zipfile import ZipFile
 
-# MAPA DE TRADUÇÃO DAS CIDADES - Corrigido exatamente igual ao Anexo 2 (com espaços no hífen)
+# MAPA DE TRADUÇÃO DAS CIDADES - Alinhado perfeitamente com a planilha de coleta
 MAPA_DESTINOS = {
     "CGR": "CAMPO GRANDE", 
     "CGB": "CUIABA", 
@@ -73,11 +73,11 @@ def extrair_dados_coleta(df_raw, termo_busca):
         if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
             continue
             
-        # Normaliza removendo múltiplos espaços ou traços grudados para não haver erro de digitação
-        val_destino_norm = " ".join(val_destino.replace("-", " ").split())
-        termo_busca_norm = " ".join(termo_busca.replace("-", " ").split())
+        # Normaliza removendo múltiplos espaços ou traços para comparação idêntica
+        val_destino_norm = "".join(val_destino.replace("-", " ").split())
+        termo_busca_norm = "".join(termo_busca.replace("-", " ").split())
         
-        if termo_busca_norm in val_destino_norm or val_destino_norm in termo_busca_norm or termo_busca == val_destino:
+        if termo_busca_norm in val_destino_norm or val_destino_norm in termo_busca_norm:
             try:
                 val_q = row.iloc[idx_qntde]
                 qtd_volumes = int(float(str(val_q).replace(',', '.').strip())) if not isinstance(val_q, (int, float)) else int(val_q)
@@ -94,6 +94,7 @@ def extrair_dados_coleta(df_raw, termo_busca):
 # 2. SELETOR DE SACAS
 sacas_manuais = {}
 if siglas_input:
+    # Divide os destinos por vírgula e remove espaços extras do início e fim
     lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
@@ -115,11 +116,16 @@ if siglas_input:
                 erros_cidades = []
                 dados_conferencia = []
 
+                # Criação de um mapa normalizado (sem espaços) para evitar qualquer KeyError catastrófico
+                mapa_normalizado = {"".join(k.split()): v for k, v in MAPA_DESTINOS.items()}
+
                 with ZipFile(zip_buffer, "w") as zip_file:
                     for sigla in lista_siglas:
-                        cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                        qtd_sacas_escolhida = sacas_manuais.get(sigla)
+                        # Busca de forma segura ignorando qualquer variação de espaço digitado
+                        sigla_chave_limpa = "".join(sigla.split())
+                        cidade_alvo = mapa_normalizado.get(sigla_chave_limpa, sigla)
                         
+                        qtd_sacas_escolhida = sacas_manuais.get(sigla)
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                         if p_original is not None and p_original > 0:
@@ -186,8 +192,7 @@ if siglas_input:
                             }
 
                             try:
-                                # AMARRAÇÃO DE SEGURANÇA: Se você digitou com espaço (Ex: POA PRIME), 
-                                # ele procura o arquivo na pasta usando underline (POA_PRIME) automaticamente!
+                                # Converte o nome digitado mudando espaço por "_" para abrir os arquivos físicos corretos da pasta
                                 sigla_segura = sigla.replace(" ", "_")
                                 caminho_template = f"templates/{sigla_segura}-SHIPPER-t.docx"
                                 
@@ -197,33 +202,4 @@ if siglas_input:
                                 doc_io = io.BytesIO()
                                 doc.save(doc_io)
                                 
-                                zip_file.writestr(f"Shipper_{sigla_segura}.docx", doc_io.getvalue())
-                                emitidos.append(sigla)
-                                
-                            except Exception as e_doc:
-                                erros_cidades.append(f"{sigla} (Template não encontrado como: templates/{sigla.replace(' ', '_')}-SHIPPER-t.docx)")
-                        else:
-                            erros_cidades.append(f"{sigla} (Não foi possível obter dados válidos para {cidade_alvo})")
-
-                if dados_conferencia:
-                    st.markdown("### 📊 Relatório de Conferência da Planilha:")
-                    st.dataframe(pd.DataFrame(dados_conferencia), use_container_width=True)
-
-                if erros_cidades:
-                    for err in erros_cidades:
-                        st.warning(f"⚠️ {err}")
-
-                if emitidos:
-                    zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas perfeitamente.")
-                    st.download_button(
-                        label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
-                        data=zip_buffer,
-                        file_name="Shippers_Final_NewPost.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("Nenhuma Shipper pôde ser gerada.")
-        except Exception as e:
-            st.error(f"Erro no processamento interno do arquivo: {e}")
+                                zip_file.writestr(f"Shipper_{sig
