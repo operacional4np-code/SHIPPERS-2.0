@@ -105,7 +105,7 @@ if siglas_input:
                             # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
                             fracao_fib = float(q_volumes) / float(qtd_sacas_escolhida)
                             
-                            # Regra de arredondamento: >= 0.50 sobe, < 0.50 desce
+                            # Regra de arredondamento oficial: >= 0.50 sobe, < 0.50 desce
                             decimal_part = fracao_fib - math.floor(fracao_fib)
                             if decimal_part >= 0.50:
                                 i_fibreboard = math.floor(fracao_fib) + 1
@@ -117,34 +117,37 @@ if siglas_input:
 
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # 3. Coluna J: Varredura do Peso Unitário Ideal
+                            # 3. Coluna J: Ajustada Varredura matemática precisa por Saco (Overpack)
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
-                            j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
+                            j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 1.00)
                             j_inicio = Decimal(f"{j_inicio_float:.2f}")
                             
                             perfeito_j = None
                             
-                            # Testando centavo por centavo para achar o menor resíduo positivo (Coluna M)
-                            for acrescimo in range(2000): 
+                            # Varre centavo por centavo buscando o equilíbrio exato da divisão distribuída pelas sacas
+                            for acrescimo in range(3000): 
                                 j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
                                 
-                                # Coluna L: Peso total do destino com sacas incluídas (J * I * Sacas)
-                                l_total_destino = j_teste * i_fib_dec * f_sacas
+                                # Peso arredondado de um Overpack isolado (Fibreboard * Peso Unitário)
+                                peso_um_overpack = (j_teste * i_fib_dec).quantize(Decimal('0.01'))
                                 
-                                # Coluna M: Conferência (L - G) -> Deve ser >= 0 e o menor possível
+                                # Peso total final real que vai ser impresso/despachado
+                                l_total_destino = peso_um_overpack * f_sacas
+                                
+                                # Conferência em relação ao peso mínimo necessário corrigido
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
                                 if m_conferencia >= 0:
                                     perfeito_j = j_teste
-                                    break # Ao achar o primeiro positivo, como estamos subindo, ele já é o menor!
+                                    break
                             
                             if perfeito_j is None:
                                 perfeito_j = Decimal(f"{base_j_float:.2f}")
 
                             j7_kg_g = perfeito_j
                             
-                            # 4. Coluna K: Total Quantity per Overpack (Coluna J * Coluna I)
-                            k7_total_saca_final = j7_kg_g * i_fib_dec
+                            # 4. Coluna K: Total Quantity per Overpack calculado de forma estrita (J * I)
+                            k7_total_saca_final = (j7_kg_g * i_fib_dec).quantize(Decimal('0.01'))
 
                             # 5. Formatação das variáveis para enviar ao Word
                             txt_fibreboard = str(int(i_fibreboard))
