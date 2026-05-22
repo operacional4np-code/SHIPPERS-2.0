@@ -8,7 +8,7 @@ from decimal import Decimal
 from docxtpl import DocxTemplate
 from zipfile import ZipFile
 
-# MAPA DE TRADUÇÃO DAS CIDADES para busca na planilha de coleta (Aceita espaço normal)
+# MAPA DE TRADUÇÃO DAS CIDADES - Corrigido exatamente igual ao Anexo 2 (com espaços no hífen)
 MAPA_DESTINOS = {
     "CGR": "CAMPO GRANDE", 
     "CGB": "CUIABA", 
@@ -18,8 +18,8 @@ MAPA_DESTINOS = {
     "MAO": "MANAUS", 
     "POA": "PORTO ALEGRE", 
     "PVH": "PORTO VELHO",
-    "POA PRIME": "PRIME-RS PORTO ALEGRE",
-    "FLN PRIME": "PRIME-SC FLORIANOPOLIS"
+    "POA PRIME": "PRIME - RS PORTO ALEGRE",
+    "FLN PRIME": "PRIME - SC FLORIANOPOLIS"
 }
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
@@ -34,7 +34,7 @@ file = st.file_uploader("2. Carregue a Planilha de Coleta (Base)", type=["xlsm",
 def extrair_dados_coleta(df_raw, termo_busca):
     """
     Localiza a tabela dinamicamente na planilha, acha o cabeçalho correto,
-    e captura os dados fazendo um cruzamento exato por sub-palavras chaves.
+    e captura os dados fazendo um cruzamento exato flexível.
     """
     linha_cabecalho = None
     idx_destino, idx_qntde, idx_peso = None, None, None
@@ -73,10 +73,11 @@ def extrair_dados_coleta(df_raw, termo_busca):
         if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
             continue
             
-        palavras_busca = set(termo_busca.replace("-", " ").split())
-        palavras_linha = set(val_destino.replace("-", " ").split())
+        # Normaliza removendo múltiplos espaços ou traços grudados para não haver erro de digitação
+        val_destino_norm = " ".join(val_destino.replace("-", " ").split())
+        termo_busca_norm = " ".join(termo_busca.replace("-", " ").split())
         
-        if palavras_busca.issubset(palavras_linha) or palavras_linha.issubset(palavras_busca) or termo_busca in val_destino:
+        if termo_busca_norm in val_destino_norm or val_destino_norm in termo_busca_norm or termo_busca == val_destino:
             try:
                 val_q = row.iloc[idx_qntde]
                 qtd_volumes = int(float(str(val_q).replace(',', '.').strip())) if not isinstance(val_q, (int, float)) else int(val_q)
@@ -185,9 +186,11 @@ if siglas_input:
                             }
 
                             try:
-                                # Correção Inteligente: Garante que o template buscado use "_" no nome do arquivo físico
+                                # AMARRAÇÃO DE SEGURANÇA: Se você digitou com espaço (Ex: POA PRIME), 
+                                # ele procura o arquivo na pasta usando underline (POA_PRIME) automaticamente!
                                 sigla_segura = sigla.replace(" ", "_")
                                 caminho_template = f"templates/{sigla_segura}-SHIPPER-t.docx"
+                                
                                 doc = DocxTemplate(caminho_template)
                                 doc.render(contexto)
                                 
