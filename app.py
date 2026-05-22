@@ -71,4 +71,62 @@ lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
 
 if lista_siglas:
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
-    cols = st.columns(len
+    cols = st.columns(len(lista_siglas))
+    for idx, sigla in enumerate(lista_siglas):
+        with cols[idx]:
+            sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, step=1, key=f"s_{sigla}")
+
+    # 3. GERAÇÃO
+    todas_sacas = all(s is not None for s in sacas_manuais.values())
+    if file and todas_sacas:
+        if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
+            df_raw = pd.read_excel(file, header=None, engine='openpyxl')
+            zip_buffer = io.BytesIO()
+            emitidos, erros = [], []
+
+            with ZipFile(zip_buffer, "w") as zip_file:
+                for sigla in lista_siglas:
+                    cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
+                    _, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
+
+                    if p_original:
+                        f_sacas = Decimal(str(sacas_manuais[sigla]))
+                        d_peso_original = Decimal(str(p_original))
+                        g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
+                        fracao_fib = float(q_volumes) / float(sacas_manuais[sigla])
+                        i_fib = Decimal(str(max(1, math.floor(fracao_fib) + (1 if (fracao_fib - math.floor(fracao_fib)) >= 0.5 else 0))))
+                        
+                        # Cálculo J
+                        base_j = float(g_peso_corrigido / f_sacas / i_fib)
+                        j_inicio = Decimal(f"{max(0.01, math.floor(base_j * 100) / 100 - 0.50):.2f}")
+                        perfeito_j = j_inicio
+                        for a in range(1500):
+                            j_teste = j_inicio + (Decimal(str(a)) * Decimal('0.01'))
+                            if (j_teste * i_fib * f_sacas) - g_peso_corrigido >= 0:
+                                perfeito_j = j_teste
+                                break
+                        
+                        sigla_arq = sigla.replace(" ", "_")
+                        contexto = {
+                            'FIBREBOARD': str(int(i_fib)),
+                            'PESO_G': "{:.2f}".format(perfeito_j).replace('.', ','),
+                            'TOTAL_OVERPACK': "{:.2f}".format(perfeito_j * i_fib).replace('.', ','),
+                            'MARCACAO': " ".join([f"#{i+1}" for i in range(int(sacas_manuais[sigla]))]),
+                            'DATA': date.today().strftime('%d/%m/%Y'),
+                            'QTD_OVERPACK': int(sacas_manuais[sigla])
+                        }
+                        
+                        try:
+                            doc = DocxTemplate(f"templates/{sigla_arq}-SHIPPER-t.docx")
+                            doc.render(contexto)
+                            doc_io = io.BytesIO()
+                            doc.save(doc_io)
+                            zip_file.writestr(f"Shipper_{sigla_arq}.docx", doc_io.getvalue())
+                            emitidos.append(sigla)
+                        except: erros.append(f"{sigla} (Erro no Template)")
+                    else: erros.append(f"{sigla} (Dados não achados)")
+
+            if emitidos:
+                st.success("✅ Sucesso!")
+                st.download_button("📥 BAIXAR ZIP", data=zip_buffer.getvalue(), file_name="Shippers_Final.zip")
+            for err in erros: st.warning(f"⚠️ {err}")
