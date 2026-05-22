@@ -8,7 +8,7 @@ from decimal import Decimal
 from docxtpl import DocxTemplate
 from zipfile import ZipFile
 
-# MAPA DE TRADUÇÃO DAS CIDADES - Alinhado perfeitamente com a planilha de coleta
+# MAPA DE TRADUÇÃO DAS CIDADES - Alinhado com a planilha de coleta
 MAPA_DESTINOS = {
     "CGR": "CAMPO GRANDE", 
     "CGB": "CUIABA", 
@@ -73,7 +73,6 @@ def extrair_dados_coleta(df_raw, termo_busca):
         if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
             continue
             
-        # Normaliza removendo múltiplos espaços ou traços para comparação idêntica
         val_destino_norm = "".join(val_destino.replace("-", " ").split())
         termo_busca_norm = "".join(termo_busca.replace("-", " ").split())
         
@@ -94,14 +93,21 @@ def extrair_dados_coleta(df_raw, termo_busca):
 # 2. SELETOR DE SACAS
 sacas_manuais = {}
 if siglas_input:
-    # Divide os destinos por vírgula e remove espaços extras do início e fim
     lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     cols = st.columns(len(lista_siglas))
     for idx, sigla in enumerate(lista_siglas):
+        # Correção interna: Remove os espaços apenas para criar a chave estável do Streamlit
+        sigla_chave_limpa = "".join(sigla.split())
         with cols[idx]:
-            sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, step=1, key=f"sacas_{sigla}")
+            sacas_manuais[sigla] = st.number_input(
+                f"Sacas para {sigla}:", 
+                min_value=1, 
+                value=None, 
+                step=1, 
+                key=f"sacas_{sigla_chave_limpa}"
+            )
 
     todas_sacas_preenchidas = all(saca is not None for saca in sacas_manuais.values())
 
@@ -116,16 +122,19 @@ if siglas_input:
                 erros_cidades = []
                 dados_conferencia = []
 
-                # Criação de um mapa normalizado (sem espaços) para evitar qualquer KeyError catastrófico
                 mapa_normalizado = {"".join(k.split()): v for k, v in MAPA_DESTINOS.items()}
 
                 with ZipFile(zip_buffer, "w") as zip_file:
                     for sigla in lista_siglas:
-                        # Busca de forma segura ignorando qualquer variação de espaço digitado
                         sigla_chave_limpa = "".join(sigla.split())
                         cidade_alvo = mapa_normalizado.get(sigla_chave_limpa, sigla)
                         
                         qtd_sacas_escolhida = sacas_manuais.get(sigla)
+                        
+                        # Proteção redundante contra recarregamento do Streamlit
+                        if qtd_sacas_escolhida is None:
+                            continue
+
                         destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                         if p_original is not None and p_original > 0:
@@ -140,66 +149,3 @@ if siglas_input:
                                 i_fibreboard = math.floor(fracao_fib) + 1
                             else:
                                 i_fibreboard = math.floor(fracao_fib)
-                                
-                            if i_fibreboard == 0: 
-                                i_fibreboard = 1
-
-                            i_fib_dec = Decimal(str(i_fibreboard))
-                            
-                            base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
-                            j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
-                            j_inicio = Decimal(f"{j_inicio_float:.2f}")
-                            
-                            perfeito_j = None
-                            for acrescimo in range(1500): 
-                                j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
-                                l_total_destino = j_teste * i_fib_dec * f_sacas
-                                m_conferencia = l_total_destino - g_peso_corrigido
-                                
-                                if m_conferencia >= Decimal('0'):
-                                    perfeito_j = j_teste
-                                    break
-                            
-                            if perfeito_j is None:
-                                perfeito_j = Decimal(f"{base_j_float:.2f}")
-
-                            j7_kg_g = perfeito_j
-                            k7_total_saca_final = j7_kg_g * i_fib_dec
-
-                            dados_conferencia.append({
-                                "Destino Digitado": sigla,
-                                "Linha Localizada na Planilha": destino_completo,
-                                "Qtd Volumes": q_volumes,
-                                "Peso Original (Kg)": float(p_original),
-                                "Fibreboard Boxes (I)": int(i_fibreboard),
-                                "Peso Unitário Kg G (J)": float(j7_kg_g),
-                                "Total Overpack (K)": float(k7_total_saca_final)
-                            })
-
-                            txt_fibreboard = str(int(i_fibreboard))
-                            txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
-                            txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
-                            
-                            texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
-
-                            contexto = {
-                                'FIBREBOARD': txt_fibreboard,
-                                'PESO_G': txt_kg_g,
-                                'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': texto_marcacao,
-                                'DATA': date.today().strftime('%d/%m/%Y'),
-                                'QTD_OVERPACK': int(qtd_sacas_escolhida)
-                            }
-
-                            try:
-                                # Converte o nome digitado mudando espaço por "_" para abrir os arquivos físicos corretos da pasta
-                                sigla_segura = sigla.replace(" ", "_")
-                                caminho_template = f"templates/{sigla_segura}-SHIPPER-t.docx"
-                                
-                                doc = DocxTemplate(caminho_template)
-                                doc.render(contexto)
-                                
-                                doc_io = io.BytesIO()
-                                doc.save(doc_io)
-                                
-                                zip_file.writestr(f"Shipper_{sig}
