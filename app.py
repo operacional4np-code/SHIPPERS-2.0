@@ -18,8 +18,8 @@ MAPA_DESTINOS = {
     "MAO": "MANAUS", 
     "POA": "PORTO ALEGRE", 
     "PVH": "PORTO VELHO",
-    "POA PRIME": "PRIME-RS PORTO ALEGRE",
-    "FLN PRIME": "PRIME-SC FLORIANOPOLIS"
+    "POA_PRIME": "PRIME-RS PORTO ALEGRE",
+    "FLN_PRIME": "PRIME-SC FLORIANOPOLIS"
 }
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
@@ -27,13 +27,14 @@ st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo Oficial")
 
 # 1. ENTRADAS DE DADOS
-siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA PRIME, FLN PRIME):", value="").upper().strip()
+st.info("💡 Para os novos destinos, digite exatamente: POA_PRIME ou FLN_PRIME (com underline)")
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA_PRIME, FLN_PRIME):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Base)", type=["xlsm", "xlsx"])
 
 def extrair_dados_coleta(df_raw, termo_busca):
     """
     Localiza a tabela dinamicamente na planilha, acha o cabeçalho correto,
-    e captura os dados filtrando os prefixos/sufixos como 'AGF', 'PRIME-RS' e 'MT'.
+    e captura os dados fazendo um cruzamento exato por sub-palavras chaves.
     """
     linha_cabecalho = None
     idx_destino, idx_qntde, idx_peso = None, None, None
@@ -72,15 +73,12 @@ def extrair_dados_coleta(df_raw, termo_busca):
         if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
             continue
             
-        # Limpeza avançada incluindo os novos termos PRIME
-        destino_limpo = val_destino.replace("AGF", "").replace("PRIME-RS", "").replace("PRIME-SC", "")\
-                                   .replace(" MT", "").replace(" MS", "").replace(" PR", "").replace(" SC", "")\
-                                   .replace(" GO", "").replace(" AM", "").replace(" RS", "").replace(" RO", "").strip()
+        # Comparação Inteligente: Checa se as palavras essenciais da cidade batem com a linha
+        palavras_busca = set(termo_busca.replace("-", " ").split())
+        palavras_linha = set(val_destino.replace("-", " ").split())
         
-        # Limpa também o termo de busca para garantir o cruzamento perfeito
-        termo_limpo = termo_busca.replace("PRIME-RS", "").replace("PRIME-SC", "").strip()
-        
-        if termo_limpo in destino_limpo or destino_limpo in termo_limpo:
+        # Se todas as palavras do nosso mapa estiverem contidas na linha da planilha, achamos!
+        if palavras_busca.issubset(palavras_linha) or palavras_linha.issubset(palavras_busca) or termo_busca in val_destino:
             try:
                 val_q = row.iloc[idx_qntde]
                 qtd_volumes = int(float(str(val_q).replace(',', '.').strip())) if not isinstance(val_q, (int, float)) else int(val_q)
@@ -88,7 +86,7 @@ def extrair_dados_coleta(df_raw, termo_busca):
                 val_p = row.iloc[idx_peso]
                 peso_original = float(str(val_p).replace(',', '.').strip()) if not isinstance(val_p, (int, float)) else float(val_p)
                 
-                return termo_busca, qtd_volumes, peso_original
+                return val_destino, qtd_volumes, peso_original
             except:
                 continue
                 
@@ -168,8 +166,8 @@ if siglas_input:
 
                             # Alimenta relatório visual
                             dados_conferencia.append({
-                                "Destino": sigla,
-                                "Cidade Localizada": cidade_alvo,
+                                "Sigla Digitada": sigla,
+                                "Linha Encontrada na Planilha": destino_completo,
                                 "Qtd Volumes": q_volumes,
                                 "Peso Original (Kg)": float(p_original),
                                 "Fibreboard Boxes (I)": int(i_fibreboard),
@@ -182,7 +180,6 @@ if siglas_input:
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
                             
-                            # Texto puro da marcação (Lembrando de deixar a tag {{MARCACAO}} com tamanho 6,5 no arquivo .docx)
                             texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
 
                             contexto = {
@@ -195,17 +192,19 @@ if siglas_input:
                             }
 
                             try:
-                                caminho_template = f"templates/{sigla}-SHIPPER-t.docx"
+                                # Ajusta o nome do arquivo para buscar com espaço no arquivo físico do template
+                                nome_template_real = sigla.replace("_", " ")
+                                caminho_template = f"templates/{nome_template_real}-SHIPPER-t.docx"
                                 doc = DocxTemplate(caminho_template)
                                 doc.render(contexto)
                                 
                                 doc_io = io.BytesIO()
                                 doc.save(doc_io)
-                                zip_file.writestr(f"Shipper_{sigla}.docx", doc_io.getvalue())
-                                emitidos.append(sigla)
+                                zip_file.writestr(f"Shipper_{nome_template_real}.docx", doc_io.getvalue())
+                                emitidos.append(nome_template_real)
                                 
                             except Exception as e_doc:
-                                erros_cidades.append(f"{sigla} (Template não encontrado em templates/{sigla}-SHIPPER-t.docx)")
+                                erros_cidades.append(f"{sigla} (Template não encontrado em: templates/{sigla.replace('_', ' ')}-SHIPPER-t.docx)")
                         else:
                             erros_cidades.append(f"{sigla} (Não foi possível obter dados válidos para {cidade_alvo})")
 
@@ -219,7 +218,7 @@ if siglas_input:
 
                 if emitidos:
                     zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas com os novos destinos incluídos.")
+                    st.success(f"✅ Sucesso! Shippers geradas com os novos destinos localizados.")
                     st.download_button(
                         label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                         data=zip_buffer,
