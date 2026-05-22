@@ -16,10 +16,10 @@ MAPA_DESTINOS = {
     "FLN": "FLORIANOPOLIS", 
     "GYN": "GOIANIA", 
     "MAO": "MANAUS", 
-    "POA PRIME: "PRIME-RS PORTO ALEGRE",
-    "FLN PRIME: "PRIME-SC FLORIANOPOLIS", 
     "POA": "PORTO ALEGRE", 
-    "PVH": "PORTO VELHO"
+    "PVH": "PORTO VELHO",
+    "POA PRIME": "PRIME-RS PORTO ALEGRE",
+    "FLN PRIME": "PRIME-SC FLORIANOPOLIS"
 }
 
 st.set_page_config(page_title="New Post - Gerador Word Shippers", layout="wide")
@@ -27,15 +27,14 @@ st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo Oficial")
 
 # 1. ENTRADAS DE DADOS
-siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
+siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA PRIME, FLN PRIME):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Base)", type=["xlsm", "xlsx"])
 
 def extrair_dados_coleta(df_raw, termo_busca):
     """
     Localiza a tabela dinamicamente na planilha, acha o cabeçalho correto,
-    e captura os dados filtrando os prefixos/sufixos como 'AGF' e 'MT'.
+    e captura os dados filtrando os prefixos/sufixos como 'AGF', 'PRIME-RS' e 'MT'.
     """
-    # 1. Encontrar em qual linha está o cabeçalho real da tabela (DESTINO, QNTDE, PESO)
     linha_cabecalho = None
     idx_destino, idx_qntde, idx_peso = None, None, None
     
@@ -43,7 +42,6 @@ def extrair_dados_coleta(df_raw, termo_busca):
         valores = [str(v).strip().upper() for v in row.values if pd.notnull(v)]
         if "DESTINO" in valores and ("QNTDE" in valores or "QNTD" in valores) and "PESO" in valores:
             linha_cabecalho = idx
-            # Mapeia os índices exatos das colunas por nome
             valores_linha_lista = [str(v).strip().upper() for v in row.values]
             idx_destino = valores_linha_lista.index("DESTINO")
             
@@ -56,7 +54,6 @@ def extrair_dados_coleta(df_raw, termo_busca):
             break
             
     if linha_cabecalho is None:
-        # Se não achar o cabeçalho textual, tenta busca genérica linha por linha
         for idx, row in df_raw.iterrows():
             linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
             if termo_busca in linha_texto and "TOTAL" not in linha_texto:
@@ -68,25 +65,26 @@ def extrair_dados_coleta(df_raw, termo_busca):
                     return termo_busca, int(numeros[0]), float(numeros[1])
         return None, None, None
 
-    # 2. Varre as linhas abaixo do cabeçalho mapeado para extrair a informação correta
     for idx in range(linha_cabecalho + 1, len(df_raw)):
         row = df_raw.iloc[idx]
         val_destino = str(row.iloc[idx_destino]).strip().upper() if pd.notnull(row.iloc[idx_destino]) else ""
         
-        # Ignora linhas de controle de código ou totais
         if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
             continue
             
-        # Normaliza o texto removendo 'AGF' e as siglas dos estados para a comparação perfeita
-        destino_limpo = val_destino.replace("AGF", "").replace(" MT", "").replace(" MS", "").replace(" PR", "").replace(" SC", "").replace(" GO", "").replace(" AM", "").replace(" RS", "").replace(" RO", "").strip()
+        # Limpeza avançada incluindo os novos termos PRIME
+        destino_limpo = val_destino.replace("AGF", "").replace("PRIME-RS", "").replace("PRIME-SC", "")\
+                                   .replace(" MT", "").replace(" MS", "").replace(" PR", "").replace(" SC", "")\
+                                   .replace(" GO", "").replace(" AM", "").replace(" RS", "").replace(" RO", "").strip()
         
-        if termo_busca in destino_limpo or destino_limpo in termo_busca:
+        # Limpa também o termo de busca para garantir o cruzamento perfeito
+        termo_limpo = termo_busca.replace("PRIME-RS", "").replace("PRIME-SC", "").strip()
+        
+        if termo_limpo in destino_limpo or destino_limpo in termo_limpo:
             try:
-                # Captura e trata Quantidade
                 val_q = row.iloc[idx_qntde]
                 qtd_volumes = int(float(str(val_q).replace(',', '.').strip())) if not isinstance(val_q, (int, float)) else int(val_q)
                 
-                # Captura e trata Peso
                 val_p = row.iloc[idx_peso]
                 peso_original = float(str(val_p).replace(',', '.').strip()) if not isinstance(val_p, (int, float)) else float(val_p)
                 
@@ -147,7 +145,7 @@ if siglas_input:
 
                             i_fib_dec = Decimal(str(i_fibreboard))
                             
-                            # Varredura centavo por centavo espelhada no Excel (Coluna M)
+                            # Varredura centavo por centavo espelhada no Excel
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
                             j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
                             j_inicio = Decimal(f"{j_inicio_float:.2f}")
@@ -183,13 +181,15 @@ if siglas_input:
                             txt_fibreboard = str(int(i_fibreboard))
                             txt_kg_g       = "{:.2f}".format(j7_kg_g).replace('.', ',')
                             txt_total_ovp  = "{:.2f}".format(k7_total_saca_final).replace('.', ',')
-                            marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
+                            
+                            # Texto puro da marcação (Lembrando de deixar a tag {{MARCACAO}} com tamanho 6,5 no arquivo .docx)
+                            texto_marcacao = " ".join([f"#{i+1}" for i in range(int(qtd_sacas_escolhida))])
 
                             contexto = {
                                 'FIBREBOARD': txt_fibreboard,
                                 'PESO_G': txt_kg_g,
                                 'TOTAL_OVERPACK': txt_total_ovp,
-                                'MARCACAO': marcacao,
+                                'MARCACAO': texto_marcacao,
                                 'DATA': date.today().strftime('%d/%m/%Y'),
                                 'QTD_OVERPACK': int(qtd_sacas_escolhida)
                             }
@@ -219,7 +219,7 @@ if siglas_input:
 
                 if emitidos:
                     zip_buffer.seek(0)
-                    st.success(f"✅ Sucesso! Shippers geradas com os valores exatos e corrigidos.")
+                    st.success(f"✅ Sucesso! Shippers geradas com os novos destinos incluídos.")
                     st.download_button(
                         label="📥 BAIXAR TODAS AS SHIPPERS EM WORD (ZIP)",
                         data=zip_buffer,
