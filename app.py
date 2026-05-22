@@ -102,3 +102,55 @@ if siglas_input:
     if file and todas_sacas_preenchidas:
         try:
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
+            
+            st.markdown("---")
+            if st.button("🔢 CALCULAR E GERAR SHIPPERS", use_container_width=True):
+                zip_buffer = io.BytesIO()
+                emitidos = []
+                erros_cidades = []
+                dados_conferencia = []
+
+                with ZipFile(zip_buffer, "w") as zip_file:
+                    for sigla in lista_siglas:
+                        cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
+                        qtd_sacas_escolhida = sacas_manuais.get(sigla)
+                        
+                        destino_completo, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
+
+                        if p_original is not None and p_original > 0:
+                            f_sacas = Decimal(str(qtd_sacas_escolhida))
+                            d_peso_original = Decimal(str(p_original))
+                            
+                            # Coluna G: Peso Corrigido
+                            g_peso_corrigido = (f_sacas * Decimal('3')) + d_peso_original
+                            
+                            # Coluna I: Fibreboard Boxes
+                            fracao_fib = float(q_volumes) / float(qtd_sacas_escolhida)
+                            decimal_part = fracao_fib - math.floor(fracao_fib)
+                            if decimal_part >= 0.50:
+                                i_fibreboard = math.floor(fracao_fib) + 1
+                            else:
+                                i_fibreboard = math.floor(fracao_fib)
+                                
+                            if i_fibreboard == 0: 
+                                i_fibreboard = 1
+
+                            i_fib_dec = Decimal(str(i_fibreboard))
+                            
+                            # Varredura centavo por centavo espelhada no Excel
+                            base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
+                            j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
+                            j_inicio = Decimal(f"{j_inicio_float:.2f}")
+                            
+                            perfeito_j = None
+                            for acrescimo in range(1500): 
+                                j_teste = j_inicio + (Decimal(str(acrescimo)) * Decimal('0.01'))
+                                l_total_destino = j_teste * i_fib_dec * f_sacas
+                                m_conferencia = l_total_destino - g_peso_corrigido
+                                
+                                if m_conferencia >= Decimal('0'):
+                                    perfeito_j = j_teste
+                                    break
+                            
+                            if perfeito_j is None:
+                                perfeito_j = Decimal(f"{base_j_float:.2
