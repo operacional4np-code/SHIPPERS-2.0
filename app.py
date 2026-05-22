@@ -217,4 +217,4 @@ if siglas_input:
                         else:
                             erros_cidades.append(f"{sigla} (Não foi possível obter dados válidos para {cidade_alvo})")
 
-                if dados_conferencia
+                if dados_conferencia:
