@@ -13,20 +13,23 @@ st.title("📄 Gerador de Shippers")
 siglas_input = st.text_input("Destinos (Ex: CGR, POA, MANAUS):", value="").upper().strip()
 file = st.file_uploader("Carregue a Planilha (CSV ou XLSX)", type=["csv", "xlsx"])
 
-# Função de busca segura usando os nomes das colunas
+# Função de busca baseada em ÍNDICE (posição da coluna)
 def encontrar_dados_na_planilha(df_raw, busca):
     busca = busca.upper().strip()
-    # Itera sobre as linhas do DataFrame
-    for _, row in df_raw.iterrows():
-        try:
-            # Acessa os dados pelo nome da coluna conforme sua planilha
-            destino_planilha = str(row['DESTINO']).upper()
-            if busca in destino_planilha:
-                qtd = row['QNTDE']
-                peso = row['PESO']
-                return True, int(qtd), float(peso)
-        except (KeyError, ValueError, TypeError):
-            continue
+    
+    # Iteramos linha por linha usando o índice da linha
+    for i in range(len(df_raw)):
+        row = df_raw.iloc[i] # Acessa a linha i
+        
+        # Pega o valor da primeira coluna (índice 0)
+        destino_planilha = str(row[0]).upper()
+        
+        if busca in destino_planilha:
+            # Pega QNTDE na coluna 1 e PESO na coluna 2
+            qtd = row[1]
+            peso = row[2]
+            return True, int(qtd), float(peso)
+            
     return False, None, None
 
 if siglas_input and file:
@@ -38,12 +41,13 @@ if siglas_input and file:
 
     for idx, sigla in enumerate(lista_siglas):
         with cols[idx]:
+            # A chave dinâmica garante que ao trocar de arquivo, o campo limpe
             key_campo = f"s_input_{sigla}_{file.name}"
             sacas[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, key=key_campo, placeholder="0")
 
     if all(s is not None for s in sacas.values()):
         if st.button("🔢 GERAR ARQUIVOS"):
-            # O parâmetro header=0 indica que a primeira linha contém os nomes das colunas
+            # header=0 pula a primeira linha (cabeçalhos)
             if file.name.endswith('.csv'):
                 df = pd.read_csv(file, header=0)
             else:
@@ -72,7 +76,7 @@ if siglas_input and file:
                         else:
                             st.error(f"❌ Template não encontrado: {caminho_template}")
                     else:
-                        st.warning(f"⚠️ Não achei o destino '{sigla}' na coluna 'DESTINO' da planilha.")
+                        st.warning(f"⚠️ Não encontrei o destino '{sigla}' na coluna 0 da planilha.")
             
             if sucesso:
                 st.download_button("📥 BAIXAR ZIP", data=zip_buffer.getvalue(), file_name="Shippers.zip")
