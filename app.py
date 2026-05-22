@@ -25,7 +25,6 @@ st.title("📄 Gerador de Shippers New Post")
 st.subheader("Cálculo Autônomo")
 
 # 1. ENTRADAS DE DADOS
-# Alterado para iniciar vazio (value="")
 siglas_input = st.text_input("1. Digite as Siglas dos Destinos separadas por vírgula (Ex: CGB, POA):", value="").upper().strip()
 file = st.file_uploader("2. Carregue a Planilha de Coleta (Dinâmica/Base)", type=["xlsm", "xlsx"])
 
@@ -39,34 +38,32 @@ def formatar_valor_br(valor):
         return str(valor).replace('.', ',')
 
 def extrair_dados_coleta(df_raw, termo_busca):
-    """Localiza a linha da cidade na planilha de coleta e pega Destino, Qtd (Col B) e Peso (Col C)"""
+    """Localiza a linha da cidade e extrai Qtd e Peso de forma dinâmica, ignorando colunas vazias"""
     for index, row in df_raw.iterrows():
+        # Transforma a linha inteira em texto para buscar a cidade
         linha_texto = " ".join([str(val).upper() for val in row.values if pd.notnull(val)])
+        
         if termo_busca in linha_texto and "TOTAL" not in linha_texto:
-            valores = list(row.values)
+            numeros = []
             
-            destino_txt = str(valores[0]).upper() if len(valores) > 0 else termo_busca
+            # Varre as células da linha da esquerda para a direita
+            for val in row.values:
+                if pd.notnull(val):
+                    # Se já for número nativo do Excel
+                    if isinstance(val, (int, float)):
+                        numeros.append(float(val))
+                    else:
+                        # Se for texto, tenta limpar e converter para número
+                        txt = str(val).strip()
+                        if re.match(r'^-?\d+([.,]\d+)?$', txt):
+                            numeros.append(float(txt.replace(',', '.')))
             
-            # Quantidade (Segunda Coluna -> Índice 1)
-            qtd_volumes = 1
-            if len(valores) > 1 and pd.notnull(valores[1]):
-                try:
-                    qtd_volumes = int(float(str(valores[1]).replace(',', '.')))
-                except: pass
+            # O primeiro número da linha é sempre a QNTD, o segundo é o PESO
+            if len(numeros) >= 2:
+                qtd_volumes = int(numeros[0])
+                peso_original = float(numeros[1])
+                return termo_busca, qtd_volumes, peso_original
                 
-            # Peso Bruto Original (Terceira Coluna -> Índice 2)
-            peso_original = 0.0
-            if len(valores) > 2 and pd.notnull(valores[2]):
-                try:
-                    txt_p = re.sub(r'[^\d.,]', '', str(valores[2])).strip()
-                    if "," in txt_p and "." in txt_p:
-                        txt_p = txt_p.replace(".", "").replace(",", ".")
-                    elif "," in txt_p:
-                        txt_p = txt_p.replace(",", ".")
-                    peso_original = float(txt_p)
-                except: pass
-                
-            return destino_txt, qtd_volumes, peso_original
     return None, None, None
 
 # 2. SELETOR DE SACAS
@@ -76,13 +73,10 @@ if siglas_input:
     
     st.markdown("### 3. Informe a quantidade de sacas para cada destino:")
     for sigla in lista_siglas:
-        # Alterado para iniciar vazio (value=None) para preenchimento 100% manual
         sacas_manuais[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, step=1, key=f"sacas_{sigla}")
 
-    # Verifica se todos os campos de saca foram preenchidos manualmente pelo usuário
     todas_sacas_preenchidas = all(saca is not None for saca in sacas_manuais.values())
 
-    # O botão só processa se o arquivo for carregado E todas as sacas estiverem preenchidas
     if file and todas_sacas_preenchidas:
         try:
             df_raw = pd.read_excel(file, header=None, engine='openpyxl')
@@ -111,7 +105,7 @@ if siglas_input:
                             # 2. Coluna I: Fibreboard Boxes (Qtd Volumes / Sacas)
                             fracao_fib = float(q_volumes) / float(qtd_sacas_escolhida)
                             
-                            # Regra de arredondamento manual estrita: >= 0.50 para cima, < 0.50 para baixo
+                            # Regra de arredondamento: >= 0.50 sobe, < 0.50 desce
                             decimal_part = fracao_fib - math.floor(fracao_fib)
                             if decimal_part >= 0.50:
                                 i_fibreboard = math.floor(fracao_fib) + 1
@@ -125,12 +119,10 @@ if siglas_input:
                             
                             # 3. Coluna J: Varredura do Peso Unitário Ideal
                             base_j_float = float(g_peso_corrigido / f_sacas / i_fib_dec)
-                            
                             j_inicio_float = max(0.01, math.floor(base_j_float * 100) / 100 - 0.50)
                             j_inicio = Decimal(f"{j_inicio_float:.2f}")
                             
                             perfeito_j = None
-                            menor_saldo_positivo = Decimal('inf')
                             
                             # Testando centavo por centavo para achar o menor resíduo positivo (Coluna M)
                             for acrescimo in range(2000): 
@@ -143,9 +135,8 @@ if siglas_input:
                                 m_conferencia = l_total_destino - g_peso_corrigido
                                 
                                 if m_conferencia >= 0:
-                                    if m_conferencia < menor_saldo_positivo:
-                                        menor_saldo_positivo = m_conferencia
-                                        perfeito_j = j_teste
+                                    perfeito_j = j_teste
+                                    break # Ao achar o primeiro positivo, como estamos subindo, ele já é o menor!
                             
                             if perfeito_j is None:
                                 perfeito_j = Decimal(f"{base_j_float:.2f}")
