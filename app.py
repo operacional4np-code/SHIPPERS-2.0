@@ -13,23 +13,25 @@ st.title("📄 Gerador de Shippers")
 siglas_input = st.text_input("Destinos (Ex: CGR, POA, MANAUS):", value="").upper().strip()
 file = st.file_uploader("Carregue a Planilha (CSV ou XLSX)", type=["csv", "xlsx"])
 
-# Função de busca baseada em ÍNDICE (posição da coluna)
+# Função de busca segura convertendo para lista
 def encontrar_dados_na_planilha(df_raw, busca):
     busca = busca.upper().strip()
     
-    # Iteramos linha por linha usando o índice da linha
-    for i in range(len(df_raw)):
-        row = df_raw.iloc[i] # Acessa a linha i
+    # Iteramos sobre o dataframe
+    for _, row in df_raw.iterrows():
+        # Convertemos a linha para uma lista, assim row_lista[0] é sempre o primeiro item
+        row_lista = row.tolist()
         
-        # Pega o valor da primeira coluna (índice 0)
-        destino_planilha = str(row[0]).upper()
+        # Garantimos que o primeiro item seja string antes de buscar
+        destino_planilha = str(row_lista[0]).upper()
         
         if busca in destino_planilha:
-            # Pega QNTDE na coluna 1 e PESO na coluna 2
-            qtd = row[1]
-            peso = row[2]
-            return True, int(qtd), float(peso)
-            
+            try:
+                qtd = row_lista[1]
+                peso = row_lista[2]
+                return True, int(qtd), float(peso)
+            except (ValueError, IndexError, TypeError):
+                continue
     return False, None, None
 
 if siglas_input and file:
@@ -41,17 +43,21 @@ if siglas_input and file:
 
     for idx, sigla in enumerate(lista_siglas):
         with cols[idx]:
-            # A chave dinâmica garante que ao trocar de arquivo, o campo limpe
             key_campo = f"s_input_{sigla}_{file.name}"
             sacas[sigla] = st.number_input(f"Sacas para {sigla}:", min_value=1, value=None, key=key_campo, placeholder="0")
 
     if all(s is not None for s in sacas.values()):
         if st.button("🔢 GERAR ARQUIVOS"):
-            # header=0 pula a primeira linha (cabeçalhos)
-            if file.name.endswith('.csv'):
-                df = pd.read_csv(file, header=0)
-            else:
-                df = pd.read_excel(file, header=0)
+            # Lemos o arquivo. Se header=0 estiver causando erro, removemos ele
+            # para ler a planilha como uma matriz bruta
+            try:
+                if file.name.endswith('.csv'):
+                    df = pd.read_csv(file, header=0)
+                else:
+                    df = pd.read_excel(file, header=0)
+            except:
+                # Caso o header=0 falhe, tenta ler sem cabeçalho
+                df = pd.read_excel(file, header=None)
             
             zip_buffer = io.BytesIO()
             base_dir = os.path.dirname(os.path.abspath(__file__))
