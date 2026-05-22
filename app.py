@@ -202,4 +202,4 @@ if siglas_input:
                                 doc_io = io.BytesIO()
                                 doc.save(doc_io)
                                 
-                                zip_file.writestr(f"Shipper_{sig
+                                zip_file.writestr(f"Shipper_{sig}
