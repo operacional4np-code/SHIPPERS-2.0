@@ -13,17 +13,20 @@ st.title("📄 Gerador de Shippers")
 siglas_input = st.text_input("Destinos (Ex: CGR, POA, MANAUS):", value="").upper().strip()
 file = st.file_uploader("Carregue a Planilha (CSV ou XLSX)", type=["csv", "xlsx"])
 
-# Função de busca corrigida
+# Função de busca segura usando os nomes das colunas
 def encontrar_dados_na_planilha(df_raw, busca):
-    # Procura na coluna 'DESTINO' (que assumimos ser a primeira ou coluna 0)
-    for index, row in df_raw.iterrows():
-        destino_planilha = str(row[0]).upper() # Pega o texto da primeira coluna
-        
-        # Verifica se o que você digitou está contido no nome da cidade na planilha
-        if busca.upper() in destino_planilha:
-            qtd = row[1] # Assumindo QNTDE na segunda coluna
-            peso = row[2] # Assumindo PESO na terceira coluna
-            return True, int(qtd), float(peso)
+    busca = busca.upper().strip()
+    # Itera sobre as linhas do DataFrame
+    for _, row in df_raw.iterrows():
+        try:
+            # Acessa os dados pelo nome da coluna conforme sua planilha
+            destino_planilha = str(row['DESTINO']).upper()
+            if busca in destino_planilha:
+                qtd = row['QNTDE']
+                peso = row['PESO']
+                return True, int(qtd), float(peso)
+        except (KeyError, ValueError, TypeError):
+            continue
     return False, None, None
 
 if siglas_input and file:
@@ -40,7 +43,7 @@ if siglas_input and file:
 
     if all(s is not None for s in sacas.values()):
         if st.button("🔢 GERAR ARQUIVOS"):
-            # header=0 diz ao pandas que a primeira linha é o cabeçalho
+            # O parâmetro header=0 indica que a primeira linha contém os nomes das colunas
             if file.name.endswith('.csv'):
                 df = pd.read_csv(file, header=0)
             else:
@@ -69,7 +72,7 @@ if siglas_input and file:
                         else:
                             st.error(f"❌ Template não encontrado: {caminho_template}")
                     else:
-                        st.warning(f"⚠️ Não achei o destino '{sigla}' na coluna DESTINO da planilha.")
+                        st.warning(f"⚠️ Não achei o destino '{sigla}' na coluna 'DESTINO' da planilha.")
             
             if sucesso:
                 st.download_button("📥 BAIXAR ZIP", data=zip_buffer.getvalue(), file_name="Shippers.zip")
