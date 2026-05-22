@@ -13,24 +13,22 @@ st.title("📄 Gerador de Shippers")
 siglas_input = st.text_input("Destinos (Ex: CGR, POA, MANAUS):", value="").upper().strip()
 file = st.file_uploader("Carregue a Planilha (CSV ou XLSX)", type=["csv", "xlsx"])
 
-# Função de busca segura convertendo para lista
-def encontrar_dados_na_planilha(df_raw, busca):
+# Função de busca ultra-robusta
+def encontrar_dados_na_planilha(df, busca):
     busca = busca.upper().strip()
     
-    # Iteramos sobre o dataframe
-    for _, row in df_raw.iterrows():
-        # Convertemos a linha para uma lista, assim row_lista[0] é sempre o primeiro item
-        row_lista = row.tolist()
+    # Procura pela coluna DESTINO, QNTDE e PESO pelo nome do cabeçalho
+    # O .loc ignora a posição e foca no nome da coluna
+    for _, row in df.iterrows():
+        # Transforma o nome do destino em string e compara
+        destino_val = str(row['DESTINO']).upper().strip()
         
-        # Garantimos que o primeiro item seja string antes de buscar
-        destino_planilha = str(row_lista[0]).upper()
-        
-        if busca in destino_planilha:
+        if busca in destino_val:
             try:
-                qtd = row_lista[1]
-                peso = row_lista[2]
-                return True, int(qtd), float(peso)
-            except (ValueError, IndexError, TypeError):
+                qtd = float(row['QNTDE'])
+                peso = float(row['PESO'])
+                return True, int(qtd), peso
+            except:
                 continue
     return False, None, None
 
@@ -48,16 +46,18 @@ if siglas_input and file:
 
     if all(s is not None for s in sacas.values()):
         if st.button("🔢 GERAR ARQUIVOS"):
-            # Lemos o arquivo. Se header=0 estiver causando erro, removemos ele
-            # para ler a planilha como uma matriz bruta
+            # Lendo a planilha garantindo que a primeira linha seja o cabeçalho
             try:
                 if file.name.endswith('.csv'):
-                    df = pd.read_csv(file, header=0)
+                    df = pd.read_csv(file)
                 else:
-                    df = pd.read_excel(file, header=0)
-            except:
-                # Caso o header=0 falhe, tenta ler sem cabeçalho
-                df = pd.read_excel(file, header=None)
+                    df = pd.read_excel(file)
+                
+                # Garante que os nomes das colunas não tenham espaços extras
+                df.columns = df.columns.str.strip()
+            except Exception as e:
+                st.error(f"Erro ao ler a planilha: {e}")
+                st.stop()
             
             zip_buffer = io.BytesIO()
             base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -82,7 +82,7 @@ if siglas_input and file:
                         else:
                             st.error(f"❌ Template não encontrado: {caminho_template}")
                     else:
-                        st.warning(f"⚠️ Não encontrei o destino '{sigla}' na coluna 0 da planilha.")
+                        st.warning(f"⚠️ Não achei o destino '{sigla}' na coluna DESTINO.")
             
             if sucesso:
                 st.download_button("📥 BAIXAR ZIP", data=zip_buffer.getvalue(), file_name="Shippers.zip")
