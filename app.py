@@ -26,7 +26,7 @@ st.title("📄 Gerador de Shippers New Post")
 
 # 1. ENTRADAS DE DADOS
 siglas_input = st.text_input("1. Digite as Siglas (Ex: CGB, POA, POA PRIME):", value="").upper().strip()
-file = st.file_uploader("2. Carregue a Planilha de Coleta (Base)", type=["xlsx","xlsm"])
+file = st.file_uploader("2. Carregue a Planilha de Coleta (com cabeçalho na ordem: destino, qntde, peso e total)", type=["xlsx","xlsm"])
 
 def extrair_dados_coleta(df_raw, termo_busca):
     linha_cabecalho = None
